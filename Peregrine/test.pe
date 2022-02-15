@@ -1,0 +1,121 @@
+val = [45, 3]
+val2 = cast<int>(val)
+
+while True:#Infinite loop lol
+    pass
+def test(a,b):
+    raise
+for x in y:
+    for i , j in x:
+        pass
+
+c = [3, 54, 76]
+c[2] = 4
+
+a = 23
+test = &a
+
+b = *test + 56
+
+arr = [2, 65]
+def hey(a: [2]int):
+    2 + 4
+
+hey(arr)
+with c:
+    pass
+with x as c:
+    pass
+with x as c,y as u:
+    pass
+class test(parent1,parent2):
+    "multi line
+    comment"
+    "test"
+    a :float = 5.6
+    b :int = cast<int>(a)+8
+    c:*int=&b
+    static d=0
+    union gg:
+        x:int
+        y:int
+    class nested_class:
+        a=8
+    def sub(a:int,b:int) -> int:
+        return self.a - self.b
+    inline def div():
+        return self.a / self.b
+    static inline def pow():
+        return self.a ** self.b
+    virtual def multi(a:int,b:int) -> int:
+        return self.a * self.b
+
+def test_x(a=0,b:int=9):
+    pass
+test_x(7)
+
+static const gg=5
+static const gg:int=5
+
+export def test2():
+    pass
+
+union n:
+  "comment1"
+  "comment""comment
+  comment"
+  g:int
+x = 3 if a==2 else 0
+scope:
+  pass
+def v():pass
+for x in y:pass
+while True:pass
+scope:pass
+if True:pass
+elif False:pass
+elif True:pass
+else:pass
+enum b:x,h=0
+with x as y:pass
+match x:
+    case t:
+        pass
+    case y:pass
+    default:pass
+i++
+i--
+def v():
+    return 1,2
+try:
+    pass
+except a:
+    pass
+except a as b:
+    pass
+except a,c as b:
+    pass
+except:
+    pass
+a:i.h.g=0
+a:int
+a:generic<T1,T2>= 0
+a:generic<T1,T2>= 0#here >= is treated as greater than or equal by the lexer
+a:module.generic<T1,T2> = 0
+a:module.generic<T1,T2>= 0#here >= is treated as greater than or equal by the lexer
+a:[]generic<T1,T2> = 0
+a:generic<T1,T2> = 0
+a:*generic<T1,T2>= 0#here >= is treated as greater than or equal by the lexer
+a:[]generic<T1,T2>= 0#here >= is treated as greater than or equal by the lexer
+a:generic<T1,T2> = 0
+type p=def()->a,a
+def i()->p,int:
+    return 1,3
+type turple_test=(int,int)
+a:turple_test=(1,2)
+extern c=import("test1","test2")
+type sumtype=int|float|*int|[]int|generic<int,int>
+a,b,c.d=1,2+3,3
+(a,b),c.d=(1,2+3),3
+a**=b
+x:&int=adsa
