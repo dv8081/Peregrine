@@ -44,7 +44,6 @@ class AstVisitor {
     virtual bool visit(const IdentifierExpression& node) { return false; };
     virtual bool visit(const TypeExpression& node) { return false; };
     virtual bool visit(const ListTypeExpr& node) { return false; };
-    virtual bool visit(const DictTypeExpr& node) { return false; };
     virtual bool visit(const FunctionTypeExpr& node) { return false; };
     virtual bool visit(const NoLiteral& node) { return false; };
     virtual bool visit(const IntegerLiteral& node) { return false; };
@@ -68,6 +67,21 @@ class AstVisitor {
     virtual bool visit(const SumType& node) { return false; };
     virtual bool visit(const MultipleAssign& node) { return false; };
     virtual bool visit(const AugAssign& node) { return false; };
+    virtual bool visit(const MethodDefinition& node) { return false; };
+    virtual bool visit(const ExternFuncDef& node) { return false; };
+    virtual bool visit(const ExternUnionLiteral& node) { return false; };
+    virtual bool visit(const ExternStructLiteral& node) { return false; };
+    virtual bool visit(const VarArgTypeExpr& node) { return false; };
+    virtual bool visit(const EllipsesTypeExpr& node) { return false; };
+    virtual bool visit(const VarKwargTypeExpr& node) { return false; };
+    virtual bool visit(const CompileTimeExpression& node) { return false; };
+    virtual bool visit(const TernaryFor& node) { return false; };
+    virtual bool visit(const PrivateDef& node) { return false; };
+    virtual bool visit(const InlineAsm& node) { return false; };
+    virtual bool visit(const LambdaDefinition& node) { return false; };
+    virtual bool visit(const GenericCall& node) { return false; };
+    virtual bool visit(const FormatedStr& node) {return false;}
+
 };
 
 } // namespace ast

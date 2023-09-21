@@ -1,7 +1,8 @@
+#Note:-This file is ment for tests so it is a bit verbose and hard to read
 type a = def(int)->int
 type g = def(int)
 def unknown_type(variable):
-    pass
+    ...
 enum colours:
     RED = 144,
     GREEN,
@@ -42,7 +43,12 @@ def lambda_test(x:a):
     printf("The value is %d",x(5))
 def func(g:int )->int:
     return g
-export def fun():pass
+export def fun():...
+type lambda_type=def(i32)->i32
+def print_int(i:i32):
+    printf("Square is %d\n",i)
+    
+
 def main():
     dec_test(4)
     def z():
@@ -64,7 +70,7 @@ def main():
     y:bool
     y=True
     if x==y:
-        pass
+        ...
     printf("%d",test(0))
     a:int=0
     b:int=7
@@ -109,7 +115,7 @@ def main():
     try:
         #should terminate the program
         printf("%d",divide(6,0))
-    except error.AssertionError:pass
+    except error.AssertionError:...
     except:
         printf("Exception caught\n")
     try:assert False
@@ -125,3 +131,10 @@ def main():
     variable_b += variable_a
     assert variable_b==6
     printf("variable_b is %d\n",variable_b)
+    type lambda_type=def(int)->int
+    square:lambda_type=def(x:int):x*x
+    printf("Square of 4 is %d\n",square(4))
+    #long chained function call
+    print_int(square(4))
+    #the above is same as folows
+    4|>square|>print_int

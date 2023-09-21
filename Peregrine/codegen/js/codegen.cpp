@@ -11,7 +11,6 @@
 #include <string_view>
 
 namespace js {
-
 Codegen::Codegen(std::string outputFilename, ast::AstNodePtr ast, bool html, std::string  filename) {
     m_filename = filename;
     m_file.open(outputFilename);
@@ -360,19 +359,23 @@ bool Codegen::visit(const ast::ListOrDictAccess& node) {
 }
 
 bool Codegen::visit(const ast::BinaryOperation& node) {
-    if (node.op().keyword == "**") {
-        write("_PEREGRINE_POWER(");
-        node.left()->accept(*this);
-        write(",");
-        node.right()->accept(*this);
-        write(")");
-    } else if (node.op().keyword == "//") {
-        write("_PEREGRINE_FLOOR(");
-        node.left()->accept(*this);
-        write("/");
-        node.right()->accept(*this);
-        write(")");
-    } else {
+    // if (node.op().keyword == "**") {
+    //     write("_P_POWER(");
+    //     node.left()->accept(*this);
+    //     write(",");
+    //     node.right()->accept(*this);
+    //     write(")");
+    // } else if (node.op().keyword == "//") {
+    //     write("_P_FLOOR(");
+    //     node.left()->accept(*this);
+    //     write("/");
+    //     node.right()->accept(*this);
+    //     write(")");
+    // }
+    if(node.token().tkType==tk_pipeline){
+        return pipeline(node);
+    }
+    else {
         write("(");
         node.left()->accept(*this);
         if (node.op().keyword=="=="){
@@ -395,15 +398,7 @@ bool Codegen::visit(const ast::PrefixExpression& node) {
 }
 
 bool Codegen::visit(const ast::FunctionCall& node) {
-    auto functionName =
-        std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())
-            ->value();
-    if (functionName=="print"||functionName=="printf"){
-        write("console.log");
-    }
-    else{
-        node.name()->accept(*this);
-    }
+    node.name()->accept(*this);
     write("(");
 
     auto args = node.arguments();
@@ -455,7 +450,14 @@ bool Codegen::visit(const ast::IdentifierExpression& node) {
     if (is_enum){
         write(enum_name.back()+"___");
     }
-    write(node.value());
+    auto name=node.value();
+    ///TODO: Use use the symbol table to get the name
+    if (name=="print"||name=="printf"){
+        write("console.log");
+    }
+    else{
+        write(node.value());
+    }
     return true;
 }
 
@@ -465,8 +467,6 @@ bool Codegen::visit(const ast::TypeExpression& node) {
 }
 
 bool Codegen::visit(const ast::ListTypeExpr& node) { return true; }
-
-bool Codegen::visit(const ast::DictTypeExpr& node) { return true; }
 
 bool Codegen::visit(const ast::FunctionTypeExpr& node) {
     //no types in js
@@ -565,12 +565,12 @@ bool Codegen::visit(const ast::TryExcept& node){
     write("try{\n");
     node.body()->accept(*this);
     //TODO:This should be base exception
-    write("}\ncatch(__PEREGRINE__exception){\n");
+    write("}\ncatch(__P__exception){\n");
     if(node.except_clauses().size()>0){
         write("if (");
         auto x=node.except_clauses()[0];
         for (size_t i=0;i<x.first.first.size();++i){
-            write("__PEREGRINE__exception===");
+            write("__P__exception===");
             x.first.first[i]->accept(*this);
             if(i<x.first.first.size()-1){write("||");}
         }
@@ -578,7 +578,7 @@ bool Codegen::visit(const ast::TryExcept& node){
         if(x.first.second->type()!=ast::KAstNoLiteral){
             write("let ");
             x.first.second->accept(*this);
-            write("=__PEREGRINE__exception;\n");
+            write("=__P__exception;\n");
         }
         x.second->accept(*this);
         write("}\n");
@@ -586,7 +586,7 @@ bool Codegen::visit(const ast::TryExcept& node){
             write("else if (");
             auto x=node.except_clauses()[i];
             for (size_t i=0;i<x.first.first.size();++i){
-                write("__PEREGRINE__exception===");
+                write("__P__exception===");
                 x.first.first[i]->accept(*this);
                 if(i<x.first.first.size()-1){write("||");}
             }
@@ -594,7 +594,7 @@ bool Codegen::visit(const ast::TryExcept& node){
             if(x.first.second->type()!=ast::KAstNoLiteral){
                 write("let ");
                 x.first.second->accept(*this);
-                write("=__PEREGRINE__exception;\n");
+                write("=__P__exception;\n");
             }
             x.second->accept(*this);
             write("}\n");
@@ -613,11 +613,11 @@ bool Codegen::visit(const ast::TryExcept& node){
     else{
         if(node.except_clauses().size()>0){
             write("else{");
-            write("throw __PEREGRINE__exception;\n");
+            write("throw __P__exception;\n");
             write("}\n");
         }
         else{
-            write("throw __PEREGRINE__exception;\n");
+            write("throw __P__exception;\n");
         }
     }
     write("}");
@@ -634,13 +634,13 @@ bool Codegen::visit(const ast::MultipleAssign& node){
     //TODO: Make it work with iterable and multiple function return 
     write("{");
     for(size_t i=0;i<values.size();++i){
-        write("let _____PEREGRINE____temp____"+std::to_string(i)+"=");
+        write("let _____P____temp____"+std::to_string(i)+"=");
         values[i]->accept(*this);
         write(";");
     }
     for(size_t i=0;i<names.size();++i){
         names[i]->accept(*this);
-        write("=_____PEREGRINE____temp____"+std::to_string(i));
+        write("=_____P____temp____"+std::to_string(i));
         write(";");
     }
     write("}");
@@ -650,6 +650,73 @@ bool Codegen::visit(const ast::AugAssign& node){
     node.name()->accept(*this);
     write(node.op());
     node.value()->accept(*this);
+    return true;
+}
+bool Codegen::visit(const ast::LambdaDefinition& node){
+    write("function(");
+    codegenFuncParams(node.parameters());
+    write("){return");
+    node.body()->accept(*this);
+    write(";}");
+    return true;
+}
+bool Codegen::pipeline(const ast::BinaryOperation& node){
+    auto right=node.right();
+    switch(right->type()){
+        case ast::KAstIdentifier:{
+            right->accept(*this);
+            write("(");
+            node.left()->accept(*this);
+            write(")");
+            break;
+        }
+        case ast::KAstFunctionCall:{
+            auto function = std::dynamic_pointer_cast<ast::FunctionCall>(right);
+            function->name()->accept(*this);
+            write("(");
+            node.left()->accept(*this);
+            auto args = function->arguments();
+            if (args.size()) {
+                write(",");
+                for (size_t i = 0; i < args.size(); ++i) {
+                    if (i)
+                        write(", ");
+                    args[i]->accept(*this);
+                }
+            }
+            write(")");
+            break;
+        }
+        case ast::KAstDotExpression:{
+            auto exp = std::dynamic_pointer_cast<ast::DotExpression>(right);
+            exp->owner()->accept(*this);
+            write(".");
+            ast::AstNodePtr member=exp->referenced();
+            member->accept(*this);
+            if (member->type()==ast::KAstIdentifier){
+                write("(");
+                node.left()->accept(*this);
+                write(")");
+            }
+            else if(member->type()==ast::KAstFunctionCall){
+                auto function = std::dynamic_pointer_cast<ast::FunctionCall>(member);
+                write("(");
+                node.left()->accept(*this);
+                auto args = function->arguments();
+                if (args.size()) {
+                    write(", ");
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (i)
+                            write(", ");
+                        args[i]->accept(*this);
+                    }
+                }
+                write(")");
+            }
+            break;
+        }
+        default:{}
+    }
     return true;
 }
 } // namespace js

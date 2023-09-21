@@ -11,7 +11,7 @@
 #include <string_view>
 
 namespace js {
-
+using namespace Utils;
 typedef std::shared_ptr<SymbolTable<ast::AstNodePtr>> EnvPtr;
 
 class Codegen : public ast::AstVisitor {
@@ -66,7 +66,6 @@ class Codegen : public ast::AstVisitor {
     bool visit(const ast::IdentifierExpression& node);
     bool visit(const ast::TypeExpression& node);
     bool visit(const ast::ListTypeExpr& node);
-    bool visit(const ast::DictTypeExpr& node);
     bool visit(const ast::FunctionTypeExpr& node);
     bool visit(const ast::NoLiteral& node);
     bool visit(const ast::IntegerLiteral& node);
@@ -82,6 +81,8 @@ class Codegen : public ast::AstVisitor {
     bool visit(const ast::MultipleAssign& node);
     bool visit(const ast::AugAssign& node);
     bool visit(const ast::PostfixExpression& node);
+    bool visit(const ast::LambdaDefinition& node);
+    bool pipeline(const ast::BinaryOperation& node);
     EnvPtr m_env;
 };
 

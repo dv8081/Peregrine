@@ -7,10 +7,8 @@
 
 namespace ast {
 
-Program::Program(std::vector<AstNodePtr> statements,std::string  comment) {
-    m_statements = statements;
-    m_comment=comment;
-}
+Program::Program(std::vector<AstNodePtr> statements, std::string comment)
+    : m_statements(statements), m_comment(comment) {}
 
 std::vector<AstNodePtr> Program::statements() const { return m_statements; }
 
@@ -58,17 +56,13 @@ AstKind DecimalLiteral::type() const { return KAstDecimal; }
 
 std::string DecimalLiteral::stringify() const { return m_value; }
 
-StringLiteral::StringLiteral(Token tok, std::string_view value, bool formatted,
-                             bool raw) {
+StringLiteral::StringLiteral(Token tok, std::string_view value, bool raw) {
     m_token = tok;
     m_value = value;
-    m_formatted = formatted;
     m_raw = raw;
 }
 
 std::string StringLiteral::value() const { return m_value; }
-
-bool StringLiteral::formatted() const { return m_formatted; }
 
 bool StringLiteral::raw() const { return m_raw; }
 
@@ -76,7 +70,13 @@ Token StringLiteral::token() const { return m_token; }
 
 AstKind StringLiteral::type() const { return KAstString; }
 
-std::string StringLiteral::stringify() const { return m_value; }
+std::string StringLiteral::stringify() const { 
+    std::string x=m_value.c_str();
+    if(m_raw){
+        return "r\""+x+"\"";
+    }
+    return "\""+x+"\""; 
+}
 
 BoolLiteral::BoolLiteral(Token tok, std::string_view value) {
     m_token = tok;
@@ -136,26 +136,24 @@ AstKind TypeExpression::type() const { return KAstTypeExpr; }
 std::string TypeExpression::stringify() const { 
     auto res= m_value;
     if(m_generic_type.size()>0){
-        res+="<";
+        res+="{";
         for(size_t i=0;i<m_generic_type.size();i++){
             res+=m_generic_type[i]->stringify();
             if(i<m_generic_type.size()-1){
                 res+=",";
             }
         }
-        res+=">";
+        res+="}";
     } 
     return res;
 }
 
-ListLiteral::ListLiteral(Token tok, AstNodePtr type,
+ListLiteral::ListLiteral(Token tok,
                          std::vector<AstNodePtr> elements) {
     m_token = tok;
-    m_type = type;
     m_elements = elements;
 }
 
-AstNodePtr ListLiteral::listType() const { return m_type; }
 
 std::vector<AstNodePtr> ListLiteral::elements() const { return m_elements; }
 
@@ -210,13 +208,16 @@ std::string DictLiteral::stringify() const {
 
 UnionLiteral::UnionLiteral(
     Token tok, std::vector<std::pair<AstNodePtr, AstNodePtr>> elements,
-    AstNodePtr name,std::string  comment) {
+    AstNodePtr name,std::string  comment,std::vector<AstNodePtr> generic) {
     m_token = tok;
     m_name = name;
     m_elements = elements;
     m_comment=comment;
+    m_generics=generic;
 }
-
+std::vector<AstNodePtr> UnionLiteral::generics() const{
+    return m_generics;
+}
 std::vector<std::pair<AstNodePtr, AstNodePtr>> UnionLiteral::elements() const {
     return m_elements;
 }
@@ -231,7 +232,18 @@ AstKind UnionLiteral::type() const { return KAstUnion; }
 
 std::string UnionLiteral::stringify() const {
     std::string res = "union ";
-    res += m_name->stringify() + ":\n";
+    res += m_name->stringify();
+    if(m_generics.size()>0){
+        res+="{";
+        for(size_t i=0;i<m_generics.size();i++){
+            res+=m_generics[i]->stringify();
+            if(i<m_generics.size()-1){
+                res+=",";
+            }
+        }
+        res+="}";
+    }
+    res+=+ ":\n";
     for (size_t i = 0; i < m_elements.size(); i++) {
         if (i)
             res += "\n";
@@ -389,17 +401,20 @@ std::string ListOrDictAccess::stringify() const {
 }
 
 ImportStatement::ImportStatement(
-    Token tok, std::pair<AstNodePtr, AstNodePtr> moduleName,
-    std::vector<std::pair<AstNodePtr, AstNodePtr>> importedSymbols) {
+    Token tok, AstNodePtr moduleName,
+    std::vector<std::pair<AstNodePtr, AstNodePtr>> importedSymbols,bool importAll) {
     m_token = tok;
     m_moduleName = moduleName;
     m_importedSymbols = importedSymbols;
+    m_importAll=importAll;
 }
 
-std::pair<AstNodePtr, AstNodePtr> ImportStatement::moduleName() const {
+AstNodePtr ImportStatement::moduleName() const {
     return m_moduleName;
 }
-
+bool ImportStatement::importAll() const {
+    return m_importAll;
+}
 std::vector<std::pair<AstNodePtr, AstNodePtr>>
 ImportStatement::importedSymbols() const {
     return m_importedSymbols;
@@ -412,30 +427,29 @@ AstKind ImportStatement::type() const { return KAstImportStmt; }
 std::string ImportStatement::stringify() const {
     std::string res = "";
 
-    res += (!m_importedSymbols.size()) ? "import " : "from ";
-
-    res += m_moduleName.first->stringify();
-    // hmm
-    if (m_moduleName.second) {
-        res += " as " + m_moduleName.second->stringify();
+    if(m_moduleName->type()==KAstNoLiteral){
+        res += "import ";
     }
-
-    if (!m_importedSymbols.size())
-        return res;
-
-    res += " import ";
-
-    for (size_t i = 0; i < m_importedSymbols.size(); i++) {
-        if (i)
-            res += ", ";
-
-        res += m_importedSymbols[i].first->stringify();
-
-        if (m_importedSymbols[i].second) {
-            res += " as " + m_importedSymbols[i].second->stringify();
+    else{
+        res += "from ";
+        res += m_moduleName->stringify();
+        res += " import ";
+    }
+    if(m_importAll){
+        res+="*";
+    }
+    else{
+        for(size_t i=0;i<m_importedSymbols.size();i++){
+            res += m_importedSymbols[i].first->stringify();
+            if(m_importedSymbols[i].second->type()!=KAstNoLiteral){
+                res += " as ";
+                res += m_importedSymbols[i].second->stringify();
+            }
+            if(i!=m_importedSymbols.size()-1){
+                res += ", ";
+            }
         }
     }
-
     return res;
 }
 
@@ -457,8 +471,14 @@ types::TypePtr VariableStatement::processedType() const {
     return m_processedType;
 }
 
-void VariableStatement::setProcessedType(types::TypePtr processedType) {
-    m_processedType = processedType;
+void VariableStatement::setProcessedType(types::TypePtr processedType,bool defined_before) {
+    m_processedType = processedType;            
+    if(!defined_before&&m_processedType!=NULL){
+        m_type=m_processedType->getTypeAst();
+    }
+    if (m_value->type()==KAstNoLiteral&&m_processedType!=NULL) {
+        m_value=m_processedType->defaultValue();
+    }
 }
 
 Token VariableStatement::token() const { return m_token; }
@@ -500,7 +520,10 @@ types::TypePtr ConstDeclaration::processedType() const {
 }
 
 void ConstDeclaration::setProcessedType(types::TypePtr processedType) {
-    m_processedType = processedType;
+    if(m_processedType!=NULL){
+        m_processedType = processedType;
+        m_type=m_processedType->getTypeAst();
+    }
 }
 
 Token ConstDeclaration::token() const { return m_token; }
@@ -510,13 +533,13 @@ AstKind ConstDeclaration::type() const { return KAstConstDecl; }
 std::string ConstDeclaration::stringify() const {
     std::string res = "const ";
 
-    if (m_type->type() != KAstNoLiteral) {
-        res += m_type->stringify();
-        res += " ";
-    }
 
     res += m_name->stringify();
 
+    if (m_type->type() != KAstNoLiteral) {
+        res += ":";
+        res += m_type->stringify();
+    }
     res += " = ";
     res += m_value->stringify();
 
@@ -551,7 +574,7 @@ ClassDefinition::ClassDefinition(Token tok, AstNodePtr name,
                                  std::vector<AstNodePtr> attributes,
                                  std::vector<AstNodePtr> methods,
                                  std::vector<AstNodePtr> other,
-                                 std::string comment) {
+                                 std::string comment,std::vector<AstNodePtr> generic) {
     m_token = tok;
     m_name = name;
     m_parent = parent;
@@ -559,10 +582,13 @@ ClassDefinition::ClassDefinition(Token tok, AstNodePtr name,
     m_methods = methods;
     m_other = other;
     m_comment=comment;
+    m_generics=generic;
 }
 
 AstNodePtr ClassDefinition::name() const { return m_name; }
-
+std::vector<AstNodePtr> ClassDefinition::generics() const{
+    return m_generics;
+}
 std::vector<AstNodePtr> ClassDefinition::parent() const { return m_parent; }
 
 std::string ClassDefinition::comment() const { return m_comment; }
@@ -583,7 +609,16 @@ std::string ClassDefinition::stringify() const {
 
     std::string res = "class ";
     res += m_name->stringify();
-
+    if(m_generics.size()>0){
+        res+="{";
+        for(size_t i=0;i<m_generics.size();i++){
+            res+=m_generics[i]->stringify();
+            if(i<m_generics.size()-1){
+                res+=",";
+            }
+        }
+        res+="}";
+    }
     res += "(";
     for (size_t i = 0; i < m_parent.size(); ++i) {
         res += m_parent[i]->stringify();
@@ -615,15 +650,18 @@ std::string ClassDefinition::stringify() const {
 FunctionDefinition::FunctionDefinition(Token tok, AstNodePtr returnType,
                                        AstNodePtr name,
                                        std::vector<parameter> parameters,
-                                       AstNodePtr body,std::string comment) {
+                                       AstNodePtr body,std::string comment,std::vector<AstNodePtr> generic) {
     m_token = tok;
     m_returnType = returnType;
     m_name = name;
     m_parameters = parameters;
     m_body = body;
     m_comment=comment;
+    m_generics=generic;
 }
-
+std::vector<AstNodePtr> FunctionDefinition::generics() const{
+    return m_generics;
+}
 AstNodePtr FunctionDefinition::returnType() const { return m_returnType; }
 
 AstNodePtr FunctionDefinition::name() const { return m_name; }
@@ -632,6 +670,10 @@ std::vector<parameter> FunctionDefinition::parameters() const {
     return m_parameters;
 }
 std::string FunctionDefinition::comment() const { return m_comment; }
+
+void FunctionDefinition::setType(types::TypePtr type){
+    m_returnType=type->getTypeAst();
+}
 
 AstNodePtr FunctionDefinition::body() const { return m_body; }
 
@@ -643,6 +685,16 @@ std::string FunctionDefinition::stringify() const {
     std::string res = "def ";
 
     res += m_name->stringify();
+    if(m_generics.size()>0){
+        res+="{";
+        for(size_t i=0;i<m_generics.size();i++){
+            res+=m_generics[i]->stringify();
+            if(i<m_generics.size()-1){
+                res+=",";
+            }
+        }
+        res+="}";
+    }
     res += "(";
 
     if (!m_parameters.empty()) {
@@ -652,15 +704,33 @@ std::string FunctionDefinition::stringify() const {
             if (i) {
                 res += ", ";
             }
-
-            res += param.p_name->stringify();
-            if (param.p_type->type()!=KAstNoLiteral){
-                res += ":";
-                res += param.p_type->stringify();
+            if(param.is_const){
+                res += "const ";
             }
-            if (param.p_default->type()!=ast::KAstNoLiteral){
-                res+="=";
-                res+=param.p_default->stringify();
+            if(param.p_paramType==VarKwarg){
+                res += param.p_type->stringify();
+                res += param.p_name->stringify();
+            }
+            else if(param.p_paramType==VarArg){
+                res += param.p_type->stringify();
+                res += param.p_name->stringify();
+            }
+            else if(param.p_paramType==Ellipses){
+                res += param.p_type->stringify();
+                if(param.p_name->type()!=KAstNoLiteral){
+                    res += param.p_name->stringify();
+                }
+            }
+            else{
+                res += param.p_name->stringify();
+                if (param.p_type->type()!=KAstNoLiteral){
+                    res += ":";
+                    res += param.p_type->stringify();
+                }
+                if (param.p_default->type()!=ast::KAstNoLiteral){
+                    res+="=";
+                    res+=param.p_default->stringify();
+                }
             }
         }
     }
@@ -979,7 +1049,7 @@ Token PassStatement::token() const { return m_token; }
 
 AstKind PassStatement::type() const { return KAstPassStatement; }
 
-std::string PassStatement::stringify() const { return "pass"; }
+std::string PassStatement::stringify() const { return m_token.keyword; }
 
 ContinueStatement::ContinueStatement(Token tok) { m_token = tok; }
 
@@ -1009,12 +1079,15 @@ std::string ScopeStatement::stringify() const {
     return res;
 }
 
-TypeDefinition::TypeDefinition(Token tok, AstNodePtr name, AstNodePtr type) {
+TypeDefinition::TypeDefinition(Token tok, AstNodePtr name, AstNodePtr type,std::vector<AstNodePtr> generic) {
     m_token = tok;
     m_name = name;
     m_type = type;
+    m_generics = generic;
 }
-
+std::vector<AstNodePtr> TypeDefinition::generics() const{
+    return m_generics;
+}
 AstNodePtr TypeDefinition::name() const { return m_name; }
 
 AstNodePtr TypeDefinition::baseType() const { return m_type; }
@@ -1025,7 +1098,16 @@ AstKind TypeDefinition::type() const { return KAstTypeDefinition; }
 
 std::string TypeDefinition::stringify() const {
     std::string res = "type " + m_name->stringify();
-
+    if(m_generics.size()>0){
+        res+="{";
+        for(size_t i=0;i<m_generics.size();i++){
+            res+=m_generics[i]->stringify();
+            if(i<m_generics.size()-1){
+                res+=",";
+            }
+        }
+        res+="}";
+    }
     res += " = ";
 
     res += m_type->stringify();
@@ -1142,29 +1224,6 @@ std::string RefTypeExpr::stringify() const {
     return res;
 }
 
-DictTypeExpr::DictTypeExpr(Token tok, AstNodePtr keyType,
-                           AstNodePtr valueType) {
-    m_token = tok;
-    m_keyType = keyType;
-    m_valueType = valueType;
-}
-
-AstNodePtr DictTypeExpr::keyType() const { return m_keyType; }
-
-AstNodePtr DictTypeExpr::valueType() const { return m_valueType; }
-
-Token DictTypeExpr::token() const { return m_token; }
-
-AstKind DictTypeExpr::type() const { return KAstDictTypeExpr; }
-
-// may change
-std::string DictTypeExpr::stringify() const {
-    std::string res = "dict[" + m_keyType->stringify();
-
-    res += "]" + m_valueType->stringify();
-
-    return res;
-}
 
 FunctionTypeExpr::FunctionTypeExpr(Token tok, std::vector<AstNodePtr> argTypes,
                                    AstNodePtr returnTypes) {
@@ -1184,8 +1243,11 @@ AstNodePtr FunctionTypeExpr::returnTypes() const {
 std::string FunctionTypeExpr::stringify() const {
     std::string res = "def(";
     if (m_argTypes.size() > 0) {
-        for (auto& x : m_argTypes) {
-            res += x->stringify() + ",";
+        for(size_t i=0; i<m_argTypes.size(); i++) {
+            res += m_argTypes[i]->stringify();
+            if(i<m_argTypes.size()-1) {
+                res += ",";
+            }
         }
     }
     res += ")";
@@ -1315,7 +1377,7 @@ AstNodePtr TernaryIf::else_value() const{return m_else_value;}
 Token TernaryIf::token() const{return m_token;}
 AstKind TernaryIf::type() const{return KAstTernaryIf;}
 std::string TernaryIf::stringify() const{
-  std::string res=m_if_value->stringify()+" if("+m_if_value->stringify()+") else "+m_else_value->stringify();
+  std::string res="("+m_if_value->stringify()+" if("+m_if_condition->stringify()+") else "+m_else_value->stringify()+")";
   return res;
 }
 TryExcept::TryExcept(Token token,AstNodePtr body,std::vector<except_type>  except_clauses,AstNodePtr else_body){
@@ -1351,54 +1413,38 @@ std::string TryExcept::stringify() const{
     res+="except:\n"+m_else_body->stringify();
     return res;
 }
-ExpressionTuple::ExpressionTuple(bool multiple_return,std::vector<AstNodePtr> items){
-    m_multiple_return=multiple_return;
+ExpressionTuple::ExpressionTuple(std::vector<AstNodePtr> items){
     m_items=items;
 }
 std::vector<AstNodePtr> ExpressionTuple::items() const{return m_items;}
-bool ExpressionTuple::multiple_return() const{return m_multiple_return;}
 AstKind ExpressionTuple::type() const{return KAstExpressionTuple;}
 std::string ExpressionTuple::stringify() const{
     std::string res;
-    if(!m_multiple_return){
-        res+="(";
-    }
     for (size_t i=0;i<m_items.size();++i){
         res+=m_items[i]->stringify();
         if(i<m_items.size()-1){
             res+=",";
         }
     }
-    if(!m_multiple_return){
-        res+=")";
-    }
     return res;
 }
-Token ExpressionTuple::token() const { return Token{}; }
-TypeTuple::TypeTuple(bool multiple_return,std::vector<AstNodePtr> items){
-    m_multiple_return=multiple_return;
+Token ExpressionTuple::token() const { return m_items[0]->token(); }
+TypeTuple::TypeTuple(std::vector<AstNodePtr> items){
     m_items=items;
 }
 std::vector<AstNodePtr> TypeTuple::items() const{return m_items;}
-bool TypeTuple::multiple_return() const{return m_multiple_return;}
 AstKind TypeTuple::type() const{return KAstTypeTuple;}
 std::string TypeTuple::stringify() const{
     std::string res;
-    if(!m_multiple_return){
-        res+="(";
-    }
     for (size_t i=0;i<m_items.size();++i){
         res+=m_items[i]->stringify();
         if(i<m_items.size()-1){
             res+=",";
         }
     }
-    if(!m_multiple_return){
-        res+=")";
-    }
     return res;
 }
-Token TypeTuple::token() const { return Token{}; }
+Token TypeTuple::token() const { return m_items[0]->token(); }
 
 ExternStatement::ExternStatement(Token token,std::vector<std::string> libs,std::string name){
     m_token=token;
@@ -1437,7 +1483,7 @@ std::string SumType::stringify() const{
     res+=")";
     return res;
 }
-Token SumType::token() const{return Token{};}
+Token SumType::token() const{return m_types[0]->token();}
 MultipleAssign::MultipleAssign(std::vector<AstNodePtr> names,std::vector<AstNodePtr> values){
     m_names=names;
     m_values=values;
@@ -1445,12 +1491,29 @@ MultipleAssign::MultipleAssign(std::vector<AstNodePtr> names,std::vector<AstNode
 std::vector<AstNodePtr> MultipleAssign::names() const{return m_names;}
 std::vector<AstNodePtr> MultipleAssign::values() const{return m_values;}
 AstKind MultipleAssign::type() const{return KAstMultipleAssign;}
+std::vector<std::pair<types::TypePtr,bool>> MultipleAssign::processed_types() const{return m_processed_types;}
+void MultipleAssign::setProcessedType(std::vector<std::pair<types::TypePtr,bool>> processed_types){
+    m_processed_types=processed_types;
+}
 std::string MultipleAssign::stringify() const{
     std::string res="((";
-    for (size_t i=0;i<m_names.size();++i){
-        res+=m_names[i]->stringify();
-        if(i<m_names.size()-1){
-            res+=",";
+    if(m_processed_types.size()>0){
+        for (size_t i=0;i<m_names.size();++i){
+            res+=m_names[i]->stringify();
+            if(!m_processed_types[i].second){
+                res+=":"+m_processed_types[i].first->getTypeAst()->stringify();
+            }
+            if(i<m_names.size()-1){
+                res+=",";
+            }
+        }
+    }
+    else{
+        for (size_t i=0;i<m_names.size();++i){
+            res+=m_names[i]->stringify();
+            if(i<m_names.size()-1){
+                res+=",";
+            }
         }
     }
     res+=")=(";
@@ -1463,7 +1526,13 @@ std::string MultipleAssign::stringify() const{
     res+="))";
     return res;
 }
-Token MultipleAssign::token() const{return Token{};}
+Token MultipleAssign::token() const{return m_names[0]->token();}
+MultipleAssign::MultiAssignType MultipleAssign::get_assign_type() const{
+    return m_assign_type;
+}
+void MultipleAssign::set_assign_type(MultipleAssign::MultiAssignType type){
+    m_assign_type = type;
+}
 AugAssign::AugAssign(Token tok, AstNodePtr name, AstNodePtr value){
     m_token=tok;
     m_name=name;
@@ -1480,5 +1549,396 @@ std::string AugAssign::stringify() const{
     res+=m_value->stringify();
     return res;
 }
+MethodDefinition::MethodDefinition(Token tok, AstNodePtr returnType, AstNodePtr name,
+                       std::vector<parameter> parameters,parameter reciever, AstNodePtr body,std::string comment,std::vector<AstNodePtr> generic) {
+    m_token = tok;
+    m_returnType = returnType;
+    m_name = name;
+    m_parameters = parameters;
+    m_body = body;
+    m_comment=comment;
+    m_reciever=reciever;
+    m_generics=generic;
+}
+std::vector<AstNodePtr> MethodDefinition::generics() const{
+    return m_generics;
+}
+AstNodePtr MethodDefinition::returnType() const { return m_returnType; }
 
+parameter MethodDefinition::reciever() const { return m_reciever; }
+
+AstNodePtr MethodDefinition::name() const { return m_name; }
+
+std::vector<parameter> MethodDefinition::parameters() const {
+    return m_parameters;
+}
+std::vector<parameter> MethodDefinition::codegen_parameters() const {
+    auto v=m_parameters;
+    v.insert(v.begin(), m_reciever);
+    return v;
+}
+std::string MethodDefinition::comment() const { return m_comment; }
+
+AstNodePtr MethodDefinition::body() const { return m_body; }
+
+Token MethodDefinition::token() const { return m_token; }
+
+AstKind MethodDefinition::type() const { return KAstMethodDef; }
+
+void MethodDefinition::setType(types::TypePtr type){
+    m_returnType=type->getTypeAst();
+}
+
+std::string MethodDefinition::stringify() const {
+    std::string res = "def (";
+    if(m_reciever.is_const){
+        res+="const ";
+    }
+    res += m_reciever.p_name->stringify();
+    if (m_reciever.p_type->type()!=KAstNoLiteral){
+        res += ":";
+        res += m_reciever.p_type->stringify();
+    }
+    if (m_reciever.p_default->type()!=ast::KAstNoLiteral){
+        res+="=";
+        res+=m_reciever.p_default->stringify();
+    }
+    res+=")";
+    res += m_name->stringify();
+    if(m_generics.size()>0){
+        res+="{";
+        for(size_t i=0;i<m_generics.size();i++){
+            res+=m_generics[i]->stringify();
+            if(i<m_generics.size()-1){
+                res+=",";
+            }
+        }
+        res+="}";
+    }
+    res += "(";
+
+    if (!m_parameters.empty()) {
+        for (size_t i = 0; i < m_parameters.size(); i++) {
+            parameter param = m_parameters[i];
+
+            if (i) {
+                res += ", ";
+            }
+            if(param.is_const){
+                res += "const ";
+            }
+            res += param.p_name->stringify();
+            if (param.p_type->type()!=KAstNoLiteral){
+                res += ":";
+                res += param.p_type->stringify();
+            }
+            if (param.p_default->type()!=ast::KAstNoLiteral){
+                res+="=";
+                res+=param.p_default->stringify();
+            }
+        }
+    }
+    res += ") -> ";
+    res += m_returnType->stringify();
+    res += ":\n";
+
+    res += m_body->stringify();
+
+    return res;
+}
+ExternFuncDef::ExternFuncDef(Token tok, AstNodePtr returnType, AstNodePtr name,
+                       std::vector<AstNodePtr> parameters,std::string owner){
+    m_token=tok;
+    m_returnType=returnType;
+    m_name=name;
+    m_parameters=parameters;
+    m_owner=owner;                   
+}
+AstNodePtr ExternFuncDef::returnType() const{return m_returnType;}
+AstNodePtr ExternFuncDef::name() const{return m_name;}
+std::string ExternFuncDef::owner() const{return m_owner;}
+std::vector<AstNodePtr> ExternFuncDef::parameters() const{return m_parameters;}
+Token ExternFuncDef::token() const{return m_token;}
+AstKind ExternFuncDef::type() const{return KAstExternFuncDef;}
+std::string ExternFuncDef::stringify() const{
+    std::string res="def "+m_owner+".";
+    res+=m_name->stringify();
+    res+="(";
+    for (size_t i=0;i<m_parameters.size();++i){
+        res+=m_parameters[i]->stringify();
+        if(i<m_parameters.size()-1){
+            res+=",";
+        }
+    }
+    res+=")->";
+    res+=m_returnType->stringify();
+    return res;
+}
+
+ExternUnionLiteral::ExternUnionLiteral(
+    Token tok, std::vector<std::pair<AstNodePtr, AstNodePtr>> elements,
+    AstNodePtr name,std::string  owner) {
+    m_token = tok;
+    m_name = name;
+    m_elements = elements;
+    m_owner=owner;
+}
+
+std::vector<std::pair<AstNodePtr, AstNodePtr>> ExternUnionLiteral::elements() const {
+    return m_elements;
+}
+
+Token ExternUnionLiteral::token() const { return m_token; }
+
+std::string ExternUnionLiteral::owner() const { return m_owner; }
+
+AstNodePtr ExternUnionLiteral::name() const { return m_name; }
+
+AstKind ExternUnionLiteral::type() const { return KAstExternUnion; }
+
+std::string ExternUnionLiteral::stringify() const {
+    std::string res = "union "+m_owner+".";
+    res += m_name->stringify() + ":\n";
+    for (size_t i = 0; i < m_elements.size(); i++) {
+        if (i)
+            res += "\n";
+        res += m_elements[i].second->stringify();
+        res += ":";
+        res += m_elements[i].first->stringify();
+    }
+
+    return res;
+}
+
+ExternStructLiteral::ExternStructLiteral(
+    Token tok, std::vector<std::pair<AstNodePtr, AstNodePtr>> elements,
+    AstNodePtr name,std::string  owner) {
+    m_token = tok;
+    m_name = name;
+    m_elements = elements;
+    m_owner=owner;
+}
+
+std::vector<std::pair<AstNodePtr, AstNodePtr>> ExternStructLiteral::elements() const {
+    return m_elements;
+}
+
+Token ExternStructLiteral::token() const { return m_token; }
+
+std::string ExternStructLiteral::owner() const { return m_owner; }
+
+AstNodePtr ExternStructLiteral::name() const { return m_name; }
+
+AstKind ExternStructLiteral::type() const { return KAstExternStruct; }
+
+std::string ExternStructLiteral::stringify() const {
+    std::string res = "class "+m_owner+".";
+    res += m_name->stringify() + ":\n";
+    for (size_t i = 0; i < m_elements.size(); i++) {
+        if (i)
+            res += "\n";
+        res += m_elements[i].second->stringify();
+        res += ":";
+        res += m_elements[i].first->stringify();
+    }
+
+    return res;
+}
+EllipsesTypeExpr::EllipsesTypeExpr(Token tok) {
+    m_token = tok;
+}
+Token EllipsesTypeExpr::token() const { return m_token; }
+AstKind EllipsesTypeExpr::type() const { return KAstEllipsesTypeExpr; }
+std::string EllipsesTypeExpr::stringify() const { return m_token.keyword ; }
+
+VarKwargTypeExpr::VarKwargTypeExpr(Token tok) {
+    m_token = tok;
+}
+Token VarKwargTypeExpr::token() const { return m_token; }
+AstKind VarKwargTypeExpr::type() const { return KAstVarKwargTypeExpr; }
+std::string VarKwargTypeExpr::stringify() const { return "**" ; }
+
+VarArgTypeExpr::VarArgTypeExpr(Token tok) {
+    m_token = tok;
+}
+Token VarArgTypeExpr::token() const { return m_token; }
+AstKind VarArgTypeExpr::type() const { return KAstVarArgTypeExpr; }
+std::string VarArgTypeExpr::stringify() const { return m_token.keyword ; }
+CompileTimeExpression::CompileTimeExpression(Token tok, AstNodePtr expr_node) {
+    m_token = tok;
+    m_expr_node = expr_node;
+}
+AstNodePtr CompileTimeExpression::expression() const{return m_expr_node;}
+Token CompileTimeExpression::token() const { return m_token; }
+AstKind CompileTimeExpression::type() const { return KAstCompileTimeExpression; }
+std::string CompileTimeExpression::stringify() const {
+    return"$" + m_expr_node->stringify();
+}
+TernaryFor::TernaryFor(Token token,AstNodePtr for_value,AstNodePtr for_iterate,std::vector<AstNodePtr> for_variable){
+    m_token=token;
+    m_for_value=for_value;
+    m_for_iterate=for_iterate;
+    m_for_variable=for_variable;
+}
+AstNodePtr TernaryFor::for_value()const{return m_for_value;}
+AstNodePtr TernaryFor::for_iterate()const{return m_for_iterate;}
+std::vector<AstNodePtr> TernaryFor::for_variable()const{return m_for_variable;}
+Token TernaryFor::token()const{return m_token;}
+AstKind TernaryFor::type()const{return KAstTernaryFor;}
+std::string TernaryFor::stringify()const{
+    std::string res;
+    res+="("+m_for_value->stringify();
+    res+=" for ";
+    for(size_t i=0;i<m_for_variable.size();++i){
+        res+=m_for_variable[i]->stringify();
+        if(i<m_for_variable.size()-1){
+            res+=",";
+        }
+    }
+    res+=" in ";
+    res+=m_for_iterate->stringify();
+    res+=")";
+    return res;
+}
+PrivateDef::PrivateDef(Token tok, AstNodePtr definition) {
+    m_token = tok;
+    m_definition = definition;
+}
+AstNodePtr PrivateDef::definition() const{return m_definition;}
+Token PrivateDef::token() const { return m_token; }
+AstKind PrivateDef::type() const { return KAstPrivate; }
+std::string PrivateDef::stringify() const {
+    return"private " + m_definition->stringify();
+}
+InlineAsm::InlineAsm(Token token,std::string assembly,AstNodePtr output,std::vector<std::pair<std::string,AstNodePtr>>inputs){
+    m_token=token;
+    m_assembly=assembly;
+    m_output=output;
+    m_inputs=inputs;
+}
+std::string InlineAsm::assembly() const{return m_assembly;}
+AstNodePtr InlineAsm::output() const{return m_output;}
+std::vector<std::pair<std::string,AstNodePtr>> InlineAsm::inputs() const{return m_inputs;}
+Token InlineAsm::token() const { return m_token; }
+AstKind InlineAsm::type() const { return KAstInlineAsm; }
+std::string InlineAsm::stringify() const{
+    std::string res ="__asm__:\n";
+    if(m_output->type()==KAstNoLiteral){
+        res+="    "+m_assembly+"\n";
+    }
+    else{
+        res+="    "+m_output->stringify()+" = "+m_assembly+"\n";
+    }
+    for(size_t i=0;i<m_inputs.size();++i){
+        res+="    "+m_inputs[i].first+" = "+m_inputs[i].second->stringify()+"\n";
+    }
+    return res;
+}
+LambdaDefinition::LambdaDefinition(Token tok,std::vector<parameter> parameters, AstNodePtr body){
+    m_tok=tok;
+    m_parameters=parameters;
+    m_body=body;
+}
+std::vector<parameter> LambdaDefinition::parameters() const{
+    return m_parameters;
+}
+AstNodePtr LambdaDefinition::body() const{
+    return m_body;
+}
+Token LambdaDefinition::token() const{
+    return m_tok;
+}
+AstKind LambdaDefinition::type() const{
+    return KAstLambda;
+}
+void LambdaDefinition::set_return_type(AstNodePtr return_type){
+    m_returnType=return_type;
+}
+AstNodePtr LambdaDefinition::return_type() const{
+    return m_returnType;
+}
+std::string LambdaDefinition::stringify() const{
+    std::string res="def(";
+    if (!m_parameters.empty()) {
+        for (size_t i = 0; i < m_parameters.size(); i++) {
+            parameter param = m_parameters[i];
+
+            if (i) {
+                res += ", ";
+            }
+            if(param.is_const){
+                res += "const ";
+            }
+            
+            res += param.p_name->stringify();
+            res += ":";
+            res += param.p_type->stringify();
+        }
+    }
+    res+=")";
+    if(m_returnType!=nullptr){
+        res+="->"+m_returnType->stringify();
+    }
+    res+=":"+m_body->stringify();
+    return res;
+}
+GenericCall::GenericCall(Token tok,std::vector<AstNodePtr> generic_types,AstNodePtr identifier){
+    m_tok=tok;
+    m_generic_types=generic_types;
+    m_identifier=identifier;
+}
+std::vector<AstNodePtr> GenericCall::generic_types() const{
+    return m_generic_types;
+}
+AstNodePtr GenericCall::identifier() const{
+    return m_identifier;
+}
+Token GenericCall::token() const{
+    return m_tok;
+}
+AstKind GenericCall::type() const{
+    return KAstGenericCall;
+}
+std::string GenericCall::stringify() const{
+    std::string res=m_identifier->stringify();
+    res+="{";
+    for(size_t i=0;i<m_generic_types.size();++i){
+        res+=m_generic_types[i]->stringify();
+        if(i<m_generic_types.size()-1){
+            res+=",";
+        }
+    }
+    res+="}";
+    return res;
+}
+FormatedStr::FormatedStr(Token tok,std::vector<AstNodePtr> items){
+    m_tok=tok;
+    m_items=items;
+}
+std::vector<AstNodePtr> FormatedStr::items() const{
+    return m_items;
+}
+Token FormatedStr::token() const{
+    return m_tok;
+}
+AstKind FormatedStr::type() const{
+    return KAstFormatedStr;
+}
+std::string FormatedStr::stringify() const{
+    std::string res="f\"";
+    for(size_t i=0;i<m_items.size();++i){
+        res+=m_items[i]->stringify();
+        if(m_items[i]->type()==KAstString){
+            if(i!=0){
+                res+="}";
+            }
+            res+="{";
+        }
+    }
+    if(m_items.back()->type()!=KAstString){
+        res+="}";
+    }
+    res+="\"";
+    return res;
+}
 } // namespace ast

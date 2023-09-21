@@ -7,6 +7,8 @@
 enum TokenType {
     tk_eof, // end of file
     // Some operators
+    tk_dollar,     // $
+    tk_pipeline,   // |>
     tk_plus,       // +
     tk_at,         // @
     tk_minus,      // -
@@ -20,10 +22,10 @@ enum TokenType {
     tk_bit_or,     // |
     tk_bit_not,    // ~
     tk_assign,     // =
-    tk_excl,       // !
     tk_colon,      // :
     tk_dot,        // .
     tk_double_dot, // ..
+    tk_ellipses,   //...
     tk_l_paren,    // (
     tk_r_paren,    // )
     tk_comma,      // ,
@@ -61,6 +63,8 @@ enum TokenType {
     tk_identifier, // foo, bar
 
     // keywords tokens
+    tk_asm,      // __asm__
+    tk_private,   // private
     tk_static,    // static
     tk_scope,     // scope
     tk_union,     // union
@@ -91,7 +95,6 @@ enum TokenType {
     tk_case,      // case
     tk_default,   // default
     tk_def,       // def
-    tk_pass,      // pass
     tk_return,    // return
     tk_and,       // and
     tk_or,        // or
@@ -116,6 +119,8 @@ enum TokenType {
 
     tk_raw,    // raw string i.e. r
     tk_format, // formatted string i.e. f
+    tk_format_str, // anything after f
+    tk_format_str_stopper //end of formated str
 };
 
 struct Token {
@@ -126,6 +131,7 @@ struct Token {
     size_t end;
     size_t line;
     TokenType tkType;
+    size_t tab=0;
 };
 
 namespace TokenUtils {

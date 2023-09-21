@@ -4,23 +4,41 @@
 #include "errors/error.hpp"
 #include <algorithm>
 #include <cstddef>
+#include <bitset>
+#include <functional>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <string_view>
-#define local_mangle_start() bool curr_state=local;local=true; auto symbol_map=m_symbolMap;
-#define local_mangle_end() local=curr_state;m_symbolMap=symbol_map;
-#define handle_ref_start() bool curr_ref=is_ref;is_ref=false;
+#define local_mangle_start() bool curr_state=local;\
+                             local=true; \
+                             auto symbol_map=m_symbolMap;
+
+#define local_mangle_end() local=curr_state;\
+                           m_symbolMap=symbol_map;
+                           
+#define handle_ref_start() bool curr_ref=is_ref;\
+                           is_ref=false;
 #define handle_ref_end() is_ref=curr_ref;
+//TODO: make this better
 std::string global_name(std::string name)
 {
     std::string res;
     for (auto& c : name)
     {
-        if(c=='\\'||c=='/'||c=='.'){
-            res+="____";
+        if(c=='\\'||c=='/'){
+            res+="$$$$$";
+        }
+        else if(c=='.'){
+            res+="$$$$";
+        }
+        else if(c=='-'){
+            res+="$$$";
+        }
+        else if(c==' '||c==':'){
+            res+="$$$$$$$";
         }
         else{
             res+=c;
@@ -34,20 +52,18 @@ namespace cpp {
 Codegen::Codegen(std::string outputFilename, ast::AstNodePtr ast,std::string filename) {
     m_filename=filename;
     m_file.open(outputFilename);
-    m_file << "#include <cstdio>\n#include <functional>\ntypedef enum{error________PEREGRINE____PEREGRINE____AssertionError,error________PEREGRINE____PEREGRINE____ZeroDivisionError} error;\n";
+    m_file << "#include <setjmp.h>\n#include <cstdlib>\n#include <stdio.h>\n#include <stdint.h>\n#include <functional>\ntypedef enum{error________P____P____Error,error________P____P____AssertionError,error________P____P____ZeroDivisionError} error;\n";
+    m_file<<"struct ____P____exception_handler{\n"
+            "jmp_buf* buf;\n"
+            "std::function<void(void)> handler;\n"
+            "error err;\n"
+            "};\n";
     m_global_name=global_name(filename);
-    m_env = createEnv();
     ast->accept(*this);
     m_file.close();
-    // m_symbolMap.print();
 }
 
-std::shared_ptr<SymbolTable<ast::AstNodePtr>>
-Codegen::createEnv(std::shared_ptr<SymbolTable<ast::AstNodePtr>> parent) {
-    return std::make_shared<SymbolTable<ast::AstNodePtr>>(parent);
-}
 
-// TODO: buffer it
 std::string Codegen::write(std::string_view code) {
     if(save){
         res+=code;
@@ -56,10 +72,6 @@ std::string Codegen::write(std::string_view code) {
         m_file << code;
     }
     return res;
-}
-
-std::string Codegen::mangleName(ast::AstNodePtr astNode) {
-    return std::string("");
 }
 
 std::string Codegen::searchDefaultModule(std::string path,
@@ -80,10 +92,13 @@ std::string Codegen::searchDefaultModule(std::string path,
 }
 
 void Codegen::codegenFuncParams(std::vector<ast::parameter> parameters,size_t start) {
-    if (parameters.size()) {
+    if ((parameters.size()-start)>0) {
         for (size_t i = start; i < parameters.size(); ++i) {
-            if (i-start)
-                write(", ");
+            // if (i-start)
+            //     write(", ");
+            if(parameters[i].is_const){
+                write("const ");
+            }
             if (parameters[i].p_type->type()==ast::KAstNoLiteral){
                 write("auto");
             }
@@ -94,12 +109,14 @@ void Codegen::codegenFuncParams(std::vector<ast::parameter> parameters,size_t st
             is_define=true;
             parameters[i].p_name->accept(*this);
             is_define=false;
-            if (parameters[i].p_default->type()!=ast::KAstNoLiteral){
+            if(parameters[i].p_default->type()!=ast::KAstNoLiteral){
                 write("=");
                 parameters[i].p_default->accept(*this);
             }
+            write(",");
         }
     }
+    write("____P____exception_handler* ____Pexception_handlers=NULL");
 }
 
 bool Codegen::visit(const ast::Program& node) {
@@ -130,11 +147,10 @@ bool Codegen::visit(const ast::FunctionDefinition& node) {
         is_func_def=true;
         if (functionName == "main") {
             // we want the main function to always return 0 if success
-            write("int main (");
+            write("int main () noexcept {\n");
             m_symbolMap.set_global("main","main");
+            write("static ____P____exception_handler* ____Pexception_handlers=NULL;\n");
             local_mangle_start();
-            codegenFuncParams(node.parameters());
-            write(") {\n");
             node.body()->accept(*this);
             write("return 0;\n}");
             local_mangle_end();
@@ -143,7 +159,7 @@ bool Codegen::visit(const ast::FunctionDefinition& node) {
                 node.returnType()->accept(*this);
             }
             else{
-                write("void");
+                write("int");
             }
             write(" ");
             is_define=true;
@@ -152,17 +168,17 @@ bool Codegen::visit(const ast::FunctionDefinition& node) {
             write("(");
             local_mangle_start();
             codegenFuncParams(node.parameters());
-            if(return_type.size()>0 && node.parameters().size()>0){
+            if(return_type.size()>0){
                 write(",");
             }
             for(size_t i=0;i<return_type.size();i++){
                 return_type[i]->accept(*this);
-                write("*____PEREGRINE____RETURN____"+std::to_string(i)+"=NULL");
+                write("*____P____RETURN____"+std::to_string(i)+"=NULL");
                 if(i<return_type.size()-1){
                     write(",");
                 }
             }
-            write(") {\n");
+            write(")  noexcept {\n");
             node.body()->accept(*this);
             write("\n}");
             local_mangle_end();
@@ -177,22 +193,22 @@ bool Codegen::visit(const ast::FunctionDefinition& node) {
         is_define=false;
         write("=[=](");
         codegenFuncParams(node.parameters());
-        if(return_type.size()>0 && node.parameters().size()>0){
+        if(return_type.size()>0){
             write(",");
         }
         for(size_t i=0;i<return_type.size();i++){
             return_type[i]->accept(*this);
-            write("*____PEREGRINE____RETURN____"+std::to_string(i)+"=NULL");
+            write("*____P____RETURN____"+std::to_string(i)+"=NULL");
             if(i<return_type.size()-1){
                 write(",");
             }
         }
-        write(")mutable->");
+        write(")mutable noexcept ->");
         if(return_type.size()==0){
                 node.returnType()->accept(*this);
         }
         else{
-            write("void");
+            write("int ");
         }
         write(" {\n");
         node.body()->accept(*this);
@@ -257,7 +273,9 @@ bool Codegen::visit(const ast::IfStatement& node) {
     write("if (");
     node.condition()->accept(*this);
     write(") {\n");
+    local_mangle_start();
     node.ifBody()->accept(*this);
+    local_mangle_end();
     write("}");
 
     auto elifNode = node.elifs();
@@ -267,7 +285,9 @@ bool Codegen::visit(const ast::IfStatement& node) {
             write("else if (");
             body.first->accept(*this);
             write(") {\n");
+            local_mangle_start();
             body.second->accept(*this);
+            local_mangle_end();
             write("}");
         }
     }
@@ -276,7 +296,9 @@ bool Codegen::visit(const ast::IfStatement& node) {
     if (elseNode->type() ==
         ast::KAstBlockStmt) { // making sure that else exists
         write("\nelse {\n");
+        local_mangle_start();
         elseNode->accept(*this);
+        local_mangle_end();
         write("}");
     }
     return true;
@@ -286,33 +308,41 @@ bool Codegen::visit(const ast::WhileStatement& node) {
     write("while (");
     node.condition()->accept(*this);
     write(") {\n");
+    local_mangle_start();
     node.body()->accept(*this);
+    local_mangle_end();
     write("}");
     return true;
 }
 
 bool Codegen::visit(const ast::ForStatement& node) {
-    write("{\nauto ____PEREGRINE____VALUE=");
+    write("{\nauto ____P____VALUE=");
     node.sequence()->accept(*this);
     write(";\n");
-    write("for (size_t ____PEREGRINE____i=0;____PEREGRINE____i<____PEREGRINE____VALUE.____PEREGRINE____PEREGRINE______iter__();++____PEREGRINE____i){\n");
+    write("for (size_t ____P____i=0;____P____i<____P____VALUE.____mem____P____P______iter__(____Pexception_handlers);++____P____i){\n");
+    local_mangle_start();
     if (node.variable().size()==1){
         write("auto ");
+        is_define=true;
         node.variable()[0]->accept(*this);
-        write("=____PEREGRINE____VALUE.____PEREGRINE____PEREGRINE______iterate__();\n");
+        is_define=false;
+        write("=____P____VALUE.____mem____P____P______iterate__(____Pexception_handlers);\n");
     }
     else{
-        write("auto ____PEREGRINE____TEMP=____PEREGRINE____VALUE.____PEREGRINE____PEREGRINE______iterate__();\n");
+        write("auto ____P____TEMP=____P____VALUE.____mem____P____P______iterate__(____Pexception_handlers);\n");
         for (size_t i=0;i<node.variable().size();++i){
             auto x=node.variable()[i];
             write("auto ");
+            is_define=true;
             x->accept(*this);
-            write("=____PEREGRINE____TEMP.____PEREGRINE____PEREGRINE______getitem__(");
+            is_define=false;
+            write("=____P____TEMP.____mem____P____P______getitem__(");
             write(std::to_string(i));
-            write(");\n");
+            write(",____Pexception_handlers);\n");
         }
     }
     node.body()->accept(*this);
+    local_mangle_end();
     write("\n}\n}");
     return true;
 }
@@ -323,6 +353,7 @@ bool Codegen::visit(const ast::MatchStatement& node) {
     auto defaultBody = node.defaultBody();
     write("\nwhile (true) {\n");
     for (size_t i = 0; i < cases.size(); ++i) {
+        local_mangle_start();
         auto currCase = cases[i];
         if (currCase.first.size() == 1 &&
             currCase.first[0]->type() == ast::KAstNoLiteral) {
@@ -347,10 +378,13 @@ bool Codegen::visit(const ast::MatchStatement& node) {
             currCase.second->accept(*this);
             write("\n}\n");
         }
+        local_mangle_end();
     }
 
     if (defaultBody->type() != ast::KAstNoLiteral) {
+        local_mangle_start();
         defaultBody->accept(*this);
+        local_mangle_end()
     }
     write("\nbreak;\n}");
     return true;
@@ -358,7 +392,9 @@ bool Codegen::visit(const ast::MatchStatement& node) {
 
 bool Codegen::visit(const ast::ScopeStatement& node) {
     write("{\n");
+    local_mangle_start();
     node.body()->accept(*this);
+    local_mangle_end();
     write("\n}");
     return true;
 }
@@ -372,14 +408,15 @@ bool Codegen::visit(const ast::ReturnStatement& node) {
             node.returnValue()->accept(*this);
         }
         else{
-            write("if (____PEREGRINE____RETURN____0!=NULL){\n");
+            write("if (____P____RETURN____0!=NULL){\n");
             for(size_t i=0;i<return_values.size();i++){
                 write("    ");
-                write("*____PEREGRINE____RETURN____"+std::to_string(i)+"=");
+                write("*____P____RETURN____"+std::to_string(i)+"=");
                 return_values[i]->accept(*this);
                 write(";\n");
             }
             write("}\n");
+            write("return 0;\n");
         }
     }
     else{
@@ -436,23 +473,23 @@ bool Codegen::visit(const ast::DecoratorStatement& node) {
         auto return_type=TurpleTypes(function->returnType());
         local_mangle_start();
         codegenFuncParams(function->parameters());
-        if(return_type.size()>0 && function->parameters().size()>0){
+        if(return_type.size()>0){
             write(",");
         }
         for(size_t i=0;i<return_type.size();i++){
             return_type[i]->accept(*this);
             write("*");
-            write("____PEREGRINE____RETURN____"+std::to_string(i)+"=NULL");
+            write("____P____RETURN____"+std::to_string(i)+"=NULL");
             if(i<return_type.size()-1){
                 write(",");
             }
         }
-        write(")mutable->");
+        write(")mutable noexcept ->");
         if(return_type.size()==0){
             function->returnType()->accept(*this);
         }
         else{
-            write("void");
+            write("int");
         }
         write("{\n");
         if(!is_func_def){
@@ -501,7 +538,7 @@ bool Codegen::visit(const ast::DictLiteral& node) { return true; }
 
 bool Codegen::visit(const ast::ListOrDictAccess& node) {
     node.container()->accept(*this);
-    write(".____PEREGRINE____PEREGRINE______getitem__(");
+    write(".____mem____P____P______getitem__(");
     handle_ref_start();
     node.keyOrIndex()[0]->accept(*this);
     if(node.keyOrIndex().size()==2){
@@ -509,37 +546,57 @@ bool Codegen::visit(const ast::ListOrDictAccess& node) {
         node.keyOrIndex()[1]->accept(*this);
     }
     handle_ref_end();
-    write(")");
+    if(is_func_def){
+        write(",____Pexception_handlers)");
+    }
+    else{
+        write(",NULL)");
+    }
     return true;
 }
 
 bool Codegen::visit(const ast::BinaryOperation& node) {
+    /*
     if (node.op().keyword == "**") {
-        write("_PEREGRINE_POWER(");
+        write("_P_POWER(");
         node.left()->accept(*this);
         write(",");
         node.right()->accept(*this);
         write(")");
     } else if (node.op().keyword == "//") {
-        write("_PEREGRINE_FLOOR(");
+        write("_P_FLOOR(");
         node.left()->accept(*this);
         write("/");
         node.right()->accept(*this);
         write(")");
     }
+    */
+    if(node.token().tkType==tk_pipeline){
+        return pipeline(node);
+    }
     else if(node.token().tkType==tk_in){
         write("(");
         node.right()->accept(*this);
-        write(".____PEREGRINE____PEREGRINE______contains__(");
+        write(".____mem____P____P______contains__(");
         node.left()->accept(*this);
-        write("))");
+        if(is_func_def){
+            write(",____Pexception_handlers))");
+        }
+        else{
+            write(",NULL))");
+        }
     }
     else if(node.token().tkType==tk_not_in){
         write("(not ");
         node.right()->accept(*this);
-        write(".____PEREGRINE____PEREGRINE______contains__(");
+        write(".____mem____P____P______contains__(");
         node.left()->accept(*this);
-        write("))");
+        if(is_func_def){
+            write(",____Pexception_handlers))");
+        }
+        else{
+            write(",NULL))");
+        }
     }
      else {
         write("(");
@@ -573,9 +630,15 @@ bool Codegen::visit(const ast::FunctionCall& node) {
                 write(", ");
             args[i]->accept(*this);
         }
+        write(",");
     }
     handle_ref_end()
-    write(")");
+    if(is_func_def){
+        write("____Pexception_handlers)");
+    }
+    else{
+        write("NULL)");
+    }
     return true;
 }
 
@@ -603,7 +666,7 @@ bool Codegen::visit(const ast::DotExpression& node) {
         if (node.owner()->type()==ast::KAstIdentifier){
             std::string name = std::dynamic_pointer_cast<ast::IdentifierExpression>(node.owner())->value();
             if(std::count(enum_name.begin(), enum_name.end(), name)&&m_symbolMap.contains(name)){
-                write(m_symbolMap[name]+"________PEREGRINE____PEREGRINE____");
+                write(m_symbolMap[name]+"________P____P____");
                 std::string enum_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(node.referenced())->value();
                 write(enum_name);
             }
@@ -638,11 +701,11 @@ bool Codegen::visit(const ast::IdentifierExpression& node) {
     
     auto x=node.value();
     if(is_ref){
-        write("____PEREGRINE____PEREGRINE____"+x);
+        write("____mem____P____P____"+x);
         return true;
     }
     if(curr_enum_name!=""){
-        write(m_symbolMap[curr_enum_name]+"________PEREGRINE____PEREGRINE____");
+        write(m_symbolMap[curr_enum_name]+"________P____P____");
         write(x);
         return true;
     }
@@ -651,10 +714,10 @@ bool Codegen::visit(const ast::IdentifierExpression& node) {
             m_symbolMap.set_local(x);
         }
         else{
-            m_symbolMap.set_global(x,"____PEREGRINE____PEREGRINE____"+m_global_name+x);
+            m_symbolMap.set_global(x,"____P____P____"+m_global_name+x);
         }
     }
-    else if(is_define){
+    else if(is_define && local){
         m_symbolMap.set_local(x);
     }
     write(m_symbolMap[x]);
@@ -669,23 +732,10 @@ bool Codegen::visit(const ast::TypeExpression& node) {
     else{
         write(m_symbolMap[x]);
     }
-    auto generic_types=node.generic_types();
-    if(generic_types.size()>0){
-        write("<");
-        for(size_t i=0;i<generic_types.size();i++){
-            generic_types[i]->accept(*this);
-            if(i<generic_types.size()-1){
-                write(",");
-            }
-        }
-        write(">");
-    } 
     return true;
 }
 
 bool Codegen::visit(const ast::ListTypeExpr& node) { return true; }
-
-bool Codegen::visit(const ast::DictTypeExpr& node) { return true; }
 
 bool Codegen::visit(const ast::FunctionTypeExpr& node) {
     write("std::function<");
@@ -695,7 +745,7 @@ bool Codegen::visit(const ast::FunctionTypeExpr& node) {
         write("(");
     }
     else{
-        write("void(");
+        write("int(");
     }
     auto argTypes = node.argTypes();
     if (argTypes.size() > 0) {
@@ -704,15 +754,17 @@ bool Codegen::visit(const ast::FunctionTypeExpr& node) {
                 write(",");
             argTypes[i]->accept(*this);
         }
-        if(return_type.size()>0){
-            write(",");
-        }
+        write(",");
     }
-    for(size_t i=0;i<return_type.size();i++){
-        return_type[i]->accept(*this);
-        write("*");
-        if(i<return_type.size()-1){
-            write(",");
+    write("____P____exception_handler*");
+    if(return_type.size()>0){
+        write(",");
+        for(size_t i=0;i<return_type.size();i++){
+            return_type[i]->accept(*this);
+            write("*");
+            if(i<return_type.size()-1){
+                write(",");
+            }
         }
     }
     write(")>");
@@ -749,11 +801,16 @@ bool Codegen::visit(const ast::NoneLiteral& node) {
     return true;
 }
 bool Codegen::visit(const ast::AssertStatement& node){
-    write("if(not ");
+    write("if(!(");
     node.condition()->accept(*this);
-    write("){\n");
-    write("printf(\"AssertionError : in line "+std::to_string(node.token().line)+" in file "+m_filename+"\\n   "+node.token().statement+"\\n\");fflush(stdout);throw error________PEREGRINE____PEREGRINE____AssertionError;");
-    write("\n}");
+    write(")){\n");
+    write("if(____Pexception_handlers!=NULL){\n");
+    write("____Pexception_handlers->err=error________P____P____AssertionError;\n");
+    write("____Pexception_handlers->handler=");
+    write("[](){printf(\"Exception : in line "+std::to_string(node.token().line)+" in file "+m_filename+"\\n   "+node.token().statement+"\\n\");fflush(stdout);exit(1);}\n");
+    write(";longjmp(*(____Pexception_handlers->buf),1);\n}else{\n");
+    write("printf(\"Exception : in line "+std::to_string(node.token().line)+" in file "+m_filename+"\\n   "+node.token().statement+"\\n\");fflush(stdout);exit(1);}\n");
+    write("}\n");
     return true;
 }
 bool Codegen::visit(const ast::StaticStatement& node){
@@ -762,63 +819,66 @@ bool Codegen::visit(const ast::StaticStatement& node){
     return true;
 }
 bool Codegen::visit(const ast::InlineStatement& node){
-    write("inline ");
+    write("inline __attribute__((always_inline)) ");
     node.body()->accept(*this);
     return true;
 }
 bool Codegen::visit(const ast::RaiseStatement& node){
-    write("throw ");
+    write("if(____Pexception_handlers!=NULL){\n");
+    write("____Pexception_handlers->err=");
     if(node.value()->type()!=ast::KAstNoLiteral){
         node.value()->accept(*this);
     }
     else{
-        write("0");
+        write("error________P____P____Error");
     }
+    write(";\n");
+    write("____Pexception_handlers->handler=");
+    write("[](){printf(\"Exception : in line "+std::to_string(node.token().line)+" in file "+m_filename+"\\n   "+node.token().statement+"\\n\");fflush(stdout);exit(1);}\n");
+    write(";longjmp(*(____Pexception_handlers->buf),1);\n}else{\n");
+    write("printf(\"Exception : in line "+std::to_string(node.token().line)+" in file "+m_filename+"\\n   "+node.token().statement+"\\n\");fflush(stdout);exit(1);}\n");
     return true;
 }
 bool Codegen::visit(const ast::UnionLiteral& node){
-    write("typedef union{\n");
+    write("union ");
+    is_define=true;
+    node.name()->accept(*this);
+    is_define=false;
+    write("{\n");
     local_mangle_start();
     for (auto& element:node.elements()){
         element.first->accept(*this);
-        write(" ");
-        is_define=true;
-        element.second->accept(*this);
-        is_define=false;
+        std::string mem = std::dynamic_pointer_cast<ast::IdentifierExpression>(element.second)->value();
+        write(" ____mem____P____P____"+mem);
         write(";\n");
     }
     write("\n}");
     local_mangle_end();
-    is_define=true;
-    node.name()->accept(*this);
-    is_define=false;
     return true;
 }
 bool Codegen::visit(const ast::EnumLiteral& node){
-    write("typedef enum{\n");
+    write("enum ");
+    node.name()->accept(*this);
+    write("{\n");
     auto fields=node.fields();
     std::string name=std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())->value();
-    auto name_ast=node.name();
     enum_name.push_back(name);
+    local_mangle_start();
     for (size_t i=0;i<fields.size();++i){
         auto field=fields[i];        
-        name_ast->accept(*this);
-        write("____");
-        local_mangle_start();
-        field.first->accept(*this);
-        local_mangle_end();
+        std::string item=std::dynamic_pointer_cast<ast::IdentifierExpression>(field.first)->value();
+        write(m_symbolMap[name]+"________P____P____"+item);
+        m_symbolMap.set_local(item,m_symbolMap[name]+"________P____P____"+item);
         if (field.second->type()!=ast::KAstNoLiteral){
-            curr_enum_name=name;
             write(" = ");
             field.second->accept(*this);
-            curr_enum_name="";
         }
         if (i!=fields.size()-1){
             write(",\n");
         }
     }
+    local_mangle_end();
     write("\n}");
-    name_ast->accept(*this);
     return true;
 }
 bool Codegen::visit(const ast::CastStatement& node){
@@ -863,31 +923,57 @@ bool Codegen::visit(const ast::ClassDefinition& node){
         write(";\n");
     }
     write("public:\n");
-    //node.name()->accept(*this);
-    //write("()=default;\n");
-    if (!is_class){
-        is_class=true;
+    {
+        local_mangle_start();
         for (auto& x : node.attributes()){
-            x->accept(*this);
-            write(";\n");
+            if(x->type()==ast::KAstStatic){
+                x = std::dynamic_pointer_cast<ast::StaticStatement>(x)->body();
+                write("static ");
+            }
+            else if(x->type()==ast::KAstPrivate){
+                x = std::dynamic_pointer_cast<ast::PrivateDef>(x)->definition();
+            }
+            switch(x->type()){
+                case ast::KAstVariableStmt:{
+                    std::shared_ptr<ast::VariableStatement> var = std::dynamic_pointer_cast<ast::VariableStatement>(x);
+                    var->varType()->accept(*this);
+                    write(" ____mem____P____P____");
+                    auto str=std::dynamic_pointer_cast<ast::IdentifierExpression>(var->name())->value();
+                    write(str);
+                    m_symbolMap.set_local(str,"____mem____P____P____"+str);
+                    if(var->value()->type()!=ast::KAstNoLiteral){
+                        write(" = ");
+                        var->value()->accept(*this);
+                    }
+                    write(";\n");
+                    break;
+                }
+                case ast::KAstConstDecl:{
+                    std::shared_ptr<ast::ConstDeclaration> var = std::dynamic_pointer_cast<ast::ConstDeclaration>(x);
+                    write("const ");
+                    var->constType()->accept(*this);
+                    write(" ____mem____P____P____");
+                    auto str=std::dynamic_pointer_cast<ast::IdentifierExpression>(var->name())->value();
+                    write(str);
+                    m_symbolMap.set_local(str,"____mem____P____P____"+str);
+                    if(var->value()->type()!=ast::KAstNoLiteral){
+                        write(" = ");
+                        var->value()->accept(*this);
+                    }
+                    write(";\n");
+                    break;
+                }
+                default:{}
+            }
         }
-        for (auto& x : node.methods()){
-            magic_methord(x,name);
-            write(";\n");
-        }
-        is_class=false;
+        local_mangle_end();
     }
-    else{
-        is_class=true;
-        for (auto& x : node.attributes()){
-            x->accept(*this);
-            write(";\n");
+    for (auto& x : node.methods()){
+        if(x->type()==ast::KAstPrivate){
+            x = std::dynamic_pointer_cast<ast::PrivateDef>(x)->definition();
         }
-        for (auto& x : node.methods()){
-            magic_methord(x,name);
-            write(";\n");
-        }
-        is_class=false;
+        magic_method(x,name);
+        write(";\n");
     }
     write("\n}");
     local_mangle_end();
@@ -898,8 +984,9 @@ bool Codegen::visit(const ast::WithStatement& node) {
     std::vector<ast::AstNodePtr> variables=node.variables();
     std::vector<ast::AstNodePtr> values=node.values();
     std::vector<std::string> no_var;
+    local_mangle_start();
     for(size_t i=0;i<values.size();++i){
-        write("auto CONTEXT____MANAGER____PEREGRINE____");
+        write("auto CONTEXT____MANAGER____P____");
         no_var.push_back(std::to_string(i));
         write(std::to_string(i));
         write("=");
@@ -907,21 +994,24 @@ bool Codegen::visit(const ast::WithStatement& node) {
         write(";\n");
         if(variables[i]->type()!=ast::KAstNoLiteral){
             write("auto ");
+            is_define=true;
             variables[i]->accept(*this);
+            is_define=false;
             write("=");
-            write("CONTEXT____MANAGER____PEREGRINE____"+no_var.back());
-            write(".____PEREGRINE____PEREGRINE______enter__()");
+            write("CONTEXT____MANAGER____P____"+no_var.back());
+            write(".____mem____P____P______enter__(____Pexception_handlers)");
         }
         else{
-            write("CONTEXT____MANAGER____PEREGRINE____"+no_var.back());
-            write(".____PEREGRINE____PEREGRINE______enter__()");
+            write("CONTEXT____MANAGER____P____"+no_var.back());
+            write(".____mem____P____P______enter__(____Pexception_handlers)");
         }
         write(";\n");
     }
     node.body()->accept(*this);
+    local_mangle_end();
     for(auto& x:no_var){
-        write("CONTEXT____MANAGER____PEREGRINE____"+x);
-        write(".____PEREGRINE____PEREGRINE______end__();\n");
+        write("CONTEXT____MANAGER____P____"+x);
+        write(".____mem____P____P______end__(____Pexception_handlers);\n");
     }
     write("\n}\n");
     return true;
@@ -952,65 +1042,101 @@ bool Codegen::visit(const ast::TernaryIf& node){
     return true;
 }
 bool Codegen::visit(const ast::TryExcept& node){
-    write("try{\n");
+    write("{\n");
+    write("auto& ____P_____temp_handler=____Pexception_handlers;\n");
+    write("{\n");
+    write(
+        "jmp_buf ____buf;\n"
+        "____P____exception_handler ____exception_handlers={&____buf};\n"
+        "____P____exception_handler* ____Pexception_handlers=&____exception_handlers;\n"
+    );
+    write("if(!setjmp(*(____Pexception_handlers->buf))){\n");
+    local_mangle_start();
     node.body()->accept(*this);
-    //TODO:This should be base exception
-    write("}\ncatch(error __PEREGRINE__exception){\n");
+    local_mangle_end();
+    write(" ____P_____temp_handler=____Pexception_handlers;\n");
+    write("}");
+    write("else{\n");
+    write("auto __P__exception=____Pexception_handlers->err;\n");
+    write("auto __P__to_call=____Pexception_handlers->handler;\n");
+    write("____P____exception_handler* ____Pexception_handlers=____P_____temp_handler;\n"); 
     if(node.except_clauses().size()>0){
         write("if (");
+        local_mangle_start();
         auto x=node.except_clauses()[0];
         for (size_t i=0;i<x.first.first.size();++i){
-            write("__PEREGRINE__exception==");
+            write("__P__exception==");
             x.first.first[i]->accept(*this);
             if(i<x.first.first.size()-1){write(" or ");}
         }
         write("){\n");
         if(x.first.second->type()!=ast::KAstNoLiteral){
             write("auto ");
+            is_define=true;
             x.first.second->accept(*this);
-            write("=__PEREGRINE__exception;\n");
+            is_define=false;
+            write("=__P__exception;\n");
         }
         x.second->accept(*this);
+        local_mangle_end();
         write("}\n");
         for(size_t i=1;i<node.except_clauses().size();++i){
             write("else if (");
+            local_mangle_start();
             auto x=node.except_clauses()[i];
             for (size_t i=0;i<x.first.first.size();++i){
-                write("__PEREGRINE__exception==");
+                write("__P__exception==");
                 x.first.first[i]->accept(*this);
                 if(i<x.first.first.size()-1){write(" or ");}
             }
             write("){\n");
             if(x.first.second->type()!=ast::KAstNoLiteral){
                 write("auto ");
+                is_define=true;
                 x.first.second->accept(*this);
-                write("=__PEREGRINE__exception;\n");
+                is_define=false;
+                write("=__P__exception;\n");
             }
             x.second->accept(*this);
             write("}\n");
+            local_mangle_end();
         }
     }
     if(node.else_body()->type()!=ast::KAstNoLiteral){
         if(node.except_clauses().size()>0){
             write("else{");
+            local_mangle_start();
             node.else_body()->accept(*this);
+            local_mangle_end();
             write("}\n");
         }
         else{
+            local_mangle_start();
             node.else_body()->accept(*this);
+            local_mangle_end();
         }
     }
     else{
-        if(node.except_clauses().size()>0){
+         if(node.except_clauses().size()>0){
             write("else{");
-            write("throw __PEREGRINE__exception;\n");
+            write("if(____Pexception_handlers!=NULL){\n");
+            write("____Pexception_handlers->err=__P__exception;");
+            write("____Pexception_handlers->handler=__P__to_call;");
+            write(";longjmp(*(____Pexception_handlers->buf),1);\n}else{\n");
+            write("__P__to_call();}\n");    
             write("}\n");
         }
         else{
-            write("throw __PEREGRINE__exception;\n");
+            write("if(____Pexception_handlers!=NULL){\n");
+            write("____Pexception_handlers->err=__P__exception;");
+            write("____Pexception_handlers->handler=__P__to_call;");
+            write(";longjmp(*(____Pexception_handlers->buf),1);\n}else{\n");
+            write("__P__to_call();}\n"); 
         }
     }
-    write("}");
+    write("};\n");
+    write("};\n");
+    write("};\n");
     return true; 
 }
 bool Codegen::visit(const ast::MultipleAssign& node){
@@ -1019,13 +1145,13 @@ bool Codegen::visit(const ast::MultipleAssign& node){
     //TODO: Make it work with iterable and multiple function return 
     write("{");
     for(size_t i=0;i<values.size();++i){
-        write("auto _____PEREGRINE____temp____"+std::to_string(i)+"=");
+        write("auto _____P____temp____"+std::to_string(i)+"=");
         values[i]->accept(*this);
         write(";");
     }
     for(size_t i=0;i<names.size();++i){
         names[i]->accept(*this);
-        write("=_____PEREGRINE____temp____"+std::to_string(i));
+        write("=_____P____temp____"+std::to_string(i));
         write(";");
     }
     write("}");
@@ -1037,5 +1163,291 @@ bool Codegen::visit(const ast::AugAssign& node){
     node.value()->accept(*this);
     return true;
 }
-
+bool Codegen::visit(const ast::MethodDefinition& node){
+    auto return_type=TurpleTypes(node.returnType());
+    auto functionName =
+        std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())
+            ->value();
+    if (!is_func_def){
+        is_func_def=true; 
+        if(return_type.size()==0){
+            node.returnType()->accept(*this);
+        }
+        else{
+            write("int");
+        }
+        write(" ");
+        is_define=true;
+        node.name()->accept(*this);
+        is_define=false;
+        write("(");
+        local_mangle_start();
+        codegenFuncParams(node.codegen_parameters());
+        if(return_type.size()>0){
+            write(",");
+        }
+        for(size_t i=0;i<return_type.size();i++){
+            return_type[i]->accept(*this);
+            write("*____P____RETURN____"+std::to_string(i)+"=NULL");
+            if(i<return_type.size()-1){
+                write(",");
+            }
+        }
+        write(") noexcept  {\n");
+        node.body()->accept(*this);
+        write("\n}");
+        local_mangle_end();
+        is_func_def=false;
+    }
+    else{
+        local_mangle_start();
+        write("auto ");
+        is_define=true;
+        node.name()->accept(*this);
+        is_define=false;
+        write("=[=](");
+        codegenFuncParams(node.codegen_parameters());
+        if(return_type.size()>0 ){
+            write(",");
+        }
+        for(size_t i=0;i<return_type.size();i++){
+            return_type[i]->accept(*this);
+            write("*____P____RETURN____"+std::to_string(i)+"=NULL");
+            if(i<return_type.size()-1){
+                write(",");
+            }
+        }
+        write(")mutable noexcept ->");
+        if(return_type.size()==0){
+                node.returnType()->accept(*this);
+        }
+        else{
+            write("int");
+        }
+        write(" {\n");
+        node.body()->accept(*this);
+        write("\n}");
+        local_mangle_end();
+    }
+    return true;
+}
+bool Codegen::visit(const ast::ExternStructLiteral& node){
+    write("extern \"C\" struct ");
+    std::string s_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())->value();
+    write(s_name);
+    if(node.elements().size()>0){
+        write("{\n");
+        auto elm=node.elements();
+        for(auto& x:elm){
+            x.first->accept(*this);
+            write(" ");
+            std::string f_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(x.second)->value();
+            write(f_name);
+            write(";\n");
+        }
+        write("};\n");
+    }
+    return true;
+}
+bool Codegen::visit(const ast::ExternUnionLiteral& node){
+    write("extern \"C\" union ");
+    std::string s_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())->value();
+    write(s_name);
+    if(node.elements().size()>0){
+        write("{\n");
+        auto elm=node.elements();
+        for(auto& x:elm){
+            x.first->accept(*this);
+            write(" ");
+            std::string f_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(x.second)->value();
+            write(f_name);
+            write(";\n");
+        }
+        write("};\n");
+    }
+    return true;
+}
+bool Codegen::visit(const ast::ExternFuncDef& node){
+    write("extern \"C\" ");
+    node.returnType()->accept(*this);
+    std::string s_name=std::dynamic_pointer_cast<ast::IdentifierExpression>(node.name())->value();
+    write(" "+s_name);
+    write("(");
+    auto param=node.parameters();
+    for(size_t i=0;i<param.size();i++){
+        if(param[i]->type()==ast::KAstEllipsesTypeExpr){
+            write("...");
+        }
+        else{
+            param[i]->accept(*this);
+        }
+        if(i<param.size()-1){
+            write(",");
+        }
+    }
+    write(")");
+    return true;
+}
+bool Codegen::visit(const ast::PrivateDef& node){
+    node.definition()->accept(*this);
+    return true;
+}
+bool Codegen::visit(const ast::InlineAsm& node){
+    write("__asm__(\""+node.assembly()+"\"\n");
+    if(node.output()->type()!=ast::KAstNoLiteral){
+        write(": \"=r\" (");
+        node.output()->accept(*this);
+        write(")\n");
+    }
+    auto in=node.inputs();
+    if(in.size()!=0){
+        write(": ");
+    }
+    for(size_t i=0;i<in.size();i++){
+        auto x=in[i];
+        write("\"");
+        write(x.first);
+        write("\" (");
+        x.second->accept(*this);
+        write(")\n");
+        if(i<in.size()-1){
+            write(",");
+        }
+    }
+    write(")");
+    return true;
+}
+bool Codegen::visit(const ast::LambdaDefinition& node){
+    if(is_func_def){
+        write("[](");
+    }
+    else{
+        write("[=](");
+    }
+    codegenFuncParams(node.parameters());
+    write(")mutable noexcept ->auto");
+    write(" {\nreturn ");
+    node.body()->accept(*this);
+    write(";\n}");
+    return true;
+}
+bool Codegen::pipeline(const ast::BinaryOperation& node){
+    auto right=node.right();
+    switch(right->type()){
+        case ast::KAstIdentifier:{
+            right->accept(*this);
+            write("(");
+            node.left()->accept(*this);
+            if(is_func_def){
+                write(",____Pexception_handlers)");
+            }
+            else{
+                write(",NULL)");
+            }
+            break;
+        }
+        case ast::KAstFunctionCall:{
+            auto function = std::dynamic_pointer_cast<ast::FunctionCall>(right);
+            function->name()->accept(*this);
+            write("(");
+            node.left()->accept(*this);
+            auto args = function->arguments();
+            if (args.size()) {
+                write(",");
+                for (size_t i = 0; i < args.size(); ++i) {
+                    if (i)
+                        write(", ");
+                    args[i]->accept(*this);
+                }
+            }
+            if(is_func_def){
+                write(",____Pexception_handlers)");
+            }
+            else{
+                write(",NULL)");
+            }
+            break;
+        }
+        case ast::KAstDotExpression:{
+            auto exp = std::dynamic_pointer_cast<ast::DotExpression>(right);
+            exp->owner()->accept(*this);
+            write(".");
+            ast::AstNodePtr member=exp->referenced();
+            if (member->type()==ast::KAstIdentifier){
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(member)->value();
+                write("____mem____P____P____"+attribute+"(");
+                node.left()->accept(*this);
+                if(is_func_def){
+                    write(",____Pexception_handlers)");
+                }
+                else{
+                    write(",NULL)");
+                }
+            }
+            else if(member->type()==ast::KAstFunctionCall){
+                auto function = std::dynamic_pointer_cast<ast::FunctionCall>(member);
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
+                write("____mem____P____P____"+attribute+"(");
+                node.left()->accept(*this);
+                auto args = function->arguments();
+                if (args.size()) {
+                    write(", ");
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (i)
+                            write(", ");
+                        args[i]->accept(*this);
+                    }
+                }
+                if(is_func_def){
+                    write(",____Pexception_handlers)");
+                }
+                else{
+                    write(",NULL)");
+                }
+            }
+            break;
+        }
+        case ast::KAstArrowExpression:{
+            auto exp = std::dynamic_pointer_cast<ast::ArrowExpression>(right);
+            exp->owner()->accept(*this);
+            write("->");
+            ast::AstNodePtr member=exp->referenced();
+            if (member->type()==ast::KAstIdentifier){
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(member)->value();
+                write("____mem____P____P____"+attribute+"(");
+                node.left()->accept(*this);
+                if(is_func_def){
+                    write(",____Pexception_handlers)");
+                }
+                else{
+                    write(",NULL)");
+                }
+            }
+            else if(member->type()==ast::KAstFunctionCall){
+                auto function = std::dynamic_pointer_cast<ast::FunctionCall>(member);
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
+                write("____mem____P____P____"+attribute+"(");
+                node.left()->accept(*this);
+                auto args = function->arguments();
+                if (args.size()) {
+                    write(", ");
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (i)
+                            write(", ");
+                        args[i]->accept(*this);
+                    }
+                }
+                if(is_func_def){
+                    write(",____Pexception_handlers)");
+                }
+                else{
+                    write(",NULL)");
+                }
+            }
+            break;
+        }
+        default:{}
+    }
+    return true;
+}
 } // namespace cpp

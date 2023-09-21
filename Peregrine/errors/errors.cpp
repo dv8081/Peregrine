@@ -2,7 +2,31 @@
 #include <iostream>
 #include <map>
 #include <string>
-
+std::string add_space(std::string& str,size_t s){
+    std::string res;
+    if(s==0) return str;
+    if(str.size()>(s+1)){
+        for(auto& c:str){
+            if(c=='\t'){
+                res+='\t';
+            }
+            else{
+                res+=' ';
+            }
+        }
+    }
+    else{
+        for(size_t i=0;i<(s-1);++i){
+            if(str[i]=='\t'){
+                res+='\t';
+            }
+            else{
+                res+=' ';
+            }
+        }
+    }
+    return res;
+};
 std::string fg(std::string text, std::string color) {
     return prefix + color + suffix + text + reset;
 }
@@ -29,9 +53,8 @@ void display(PEError e) {
     std::cout << std::to_string(e.loc.line) << " | "
               << e.loc.code.substr(0, e.loc.code.length()) << "\n";
     std::cout << "  |";
-    std::cout << std::string(e.loc.loc+1, ' ');
-    std::cout << fg("~", light_red);
-    std::cout << fg(style(" <----- " + e.submsg, bold), light_red) << "\n";
+    std::cout << add_space(e.loc.code,e.loc.loc);
+    std::cout << fg(style(" ^----- " + e.submsg, bold), light_red) << "\n";
     std::cout << "  |\n  |\n";
     if (e.hint != "") {
         std::cout << "  ├- " << fg(style("Try: ", bold), blue) << e.hint
@@ -46,4 +69,5 @@ void display(PEError e) {
         std::cout << "  ╰- " << fg(style("Hint: ", bold), cyan)
                 << "Use peregrine --explain=" << e.ecode << "\n";
     }
+    std::cout<<std::endl;
 }

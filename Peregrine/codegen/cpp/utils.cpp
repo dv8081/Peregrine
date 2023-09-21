@@ -1,7 +1,13 @@
 #include "codegen.hpp"
 #include <memory>
 #include <assert.h>
+#define local_mangle_start() bool curr_state=local;\
+                             local=true; \
+                             auto symbol_map=m_symbolMap;
 
+#define local_mangle_end() local=curr_state;\
+                           m_symbolMap=symbol_map;
+                           
 namespace cpp {
 
 void Codegen::matchArg(std::vector<ast::AstNodePtr> matchItem,
@@ -36,7 +42,13 @@ std::string Codegen::wrap(ast::AstNodePtr item,std::string contains){
     switch(item->type()){
         case ast::KAstIdentifier:{
             item->accept(*this);
-            var+=res+"("+contains+")";
+            var+=res+"("+contains;
+            if(is_func_def){
+                var+=",____Pexception_handlers)";
+            }
+            else{
+                var+=",NULL)";
+            }
             res="";
             break;
         }
@@ -47,13 +59,20 @@ std::string Codegen::wrap(ast::AstNodePtr item,std::string contains){
             res="";
             auto args = function->arguments();
             if (args.size()) {
+                write(", ");
                 for (size_t i = 0; i < args.size(); ++i) {
                     if (i)
                         write(", ");
                     args[i]->accept(*this);
                 }
             }
-            var+=res+")";
+            var+=res;
+            if(is_func_def){
+                var+=",____Pexception_handlers)";
+            }
+            else{
+                var+=",NULL)";
+            }
             res="";
             break;
         }
@@ -66,24 +85,39 @@ std::string Codegen::wrap(ast::AstNodePtr item,std::string contains){
             ast::AstNodePtr member=exp->referenced();
 
             if (member->type()==ast::KAstIdentifier){
-                member->accept(*this);
-                var+=res+"("+contains+")";
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(member)->value();
+                write("____mem____P____P____"+attribute);
+                var+=res+"("+contains;
+                if(is_func_def){
+                    var+=",____Pexception_handlers)";
+                }
+                else{
+                    var+=",NULL)";
+                }
                 res="";
             }
             else if(member->type()==ast::KAstFunctionCall){
                 auto function = std::dynamic_pointer_cast<ast::FunctionCall>(member);
-                function->name()->accept(*this);
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
+                write("____mem____P____P____"+attribute);
                 var+=res+"("+contains;
                 res="";
                 auto args = function->arguments();
                 if (args.size()) {
+                    write(", ");
                     for (size_t i = 0; i < args.size(); ++i) {
                         if (i)
                             write(", ");
                         args[i]->accept(*this);
                     }
                 }
-                var+=res+")";
+                var+=res;
+                if(is_func_def){
+                    var+=",____Pexception_handlers)";
+                }
+                else{
+                    var+=",NULL)";
+                }
                 res="";
             }
             break;
@@ -97,24 +131,39 @@ std::string Codegen::wrap(ast::AstNodePtr item,std::string contains){
             ast::AstNodePtr member=exp->referenced();
 
             if (member->type()==ast::KAstIdentifier){
-                member->accept(*this);
-                var+=res+"("+contains+")";
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(member)->value();
+                write("____mem____P____P____"+attribute);
+                var+=res+"("+contains;
+                if(is_func_def){
+                    var+=",____Pexception_handlers)";
+                }
+                else{
+                    var+=",NULL)";
+                }
                 res="";
             }
             else if(member->type()==ast::KAstFunctionCall){
                 auto function = std::dynamic_pointer_cast<ast::FunctionCall>(member);
-                function->name()->accept(*this);
+                auto attribute=std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
+                write("____mem____P____P____"+attribute);
                 var+=res+"("+contains;
                 res="";
                 auto args = function->arguments();
                 if (args.size()) {
+                    write(", ");
                     for (size_t i = 0; i < args.size(); ++i) {
                         if (i)
                             write(", ");
                         args[i]->accept(*this);
                     }
                 }
-                var+=res+")";
+                var+=res;
+                if(is_func_def){
+                    var+=",____Pexception_handlers)";
+                }
+                else{
+                    var+=",NULL)";
+                }
                 res="";
             }
             break;
@@ -123,142 +172,54 @@ std::string Codegen::wrap(ast::AstNodePtr item,std::string contains){
     }
     return var;
 }
-//Based on:- https://docs.python.org/3/reference/datamodel.html
-void Codegen::write_name(std::shared_ptr<ast::FunctionDefinition> node,std::string name,std::string virtual_static_inline){
+void Codegen::write_name(std::shared_ptr<ast::FunctionDefinition> node,std::string name,std::string virtual_static_inline,bool is_static){
     auto return_type=TurpleTypes(node->returnType());
-    std::map<std::string,std::string> overloaded_binary_op={
-                                                    {"__add__","+"},
-                                                    {"__sub__","-"},
-                                                    {"__mul__","*"},
-                                                    {"__truediv__","/"},
-                                                    {"__mod__","%"},
-                                                    {"__rshift__",">>"},
-                                                    {"__lshift__","<<"},
-                                                    {"__and__"," and"},
-                                                    {"__or__"," or"},
-                                                    {"__rand__","&"},
-                                                    {"__ror__","|"},
-                                                    {"__xor__","^"},
-                                                    {"__lt__","<"},
-                                                    {"__gt__",">"},
-                                                    {"__le__","<="},
-                                                    {"__ge__",">="},
-                                                    {"__eq__","=="},
-                                                    {"__ne__","!="},
-                                                    {"__isub__","-="},
-                                                    {"__iadd__","+="},
-                                                    {"__imul__","*="},
-                                                    {"__idiv__","/="},
-                                                    {"__imod__","%="},
-                                                    {"__irshift__",">>="},
-                                                    {"__ilshift__","<<="},
-                                                    {"__iand__","&="},
-                                                    {"__ior__","|="},
-                                                    {"__ixor__","^="}
-                                                    };
-    std::map<std::string,std::string> overloaded_unary_op={
-                                                    {"__neg__","-"},
-                                                    {"__invert__","~"},
-                                                    {"__not__"," not"},
-                                                    {"__increment__","++"},
-                                                    {"__decrement__","--"}
-                                                    };
-    if (overloaded_binary_op.count(name)>0 && return_type.size()==0 &&node->parameters().size()==2  && virtual_static_inline!="static" && virtual_static_inline!="static inline"){
-        //TODO: Dont declare it twice
+    
+    if(return_type.size()==0){
         node->returnType()->accept(*this);
-        write(" ____PEREGRINE____PEREGRINE____"+name+"(");
-        m_symbolMap.set_local(name);
-        codegenFuncParams(node->parameters(),1);
-        write("){\n");
-        write("auto& ");
-        is_define=true;
-        node->parameters()[0].p_name->accept(*this);
-        is_define=false;
-        write("=*this;\n");
-        if(not is_func_def){
-            is_func_def=true;
-            node->body()->accept(*this);
-            is_func_def=false;
-        }
-        else{
-            node->body()->accept(*this);
-        }
-        write("\n};\n");
-        write(virtual_static_inline+" ");
-        node->returnType()->accept(*this);
-        write(" operator"+overloaded_binary_op[name]+"(");
-        codegenFuncParams(node->parameters(),1);
-        write("){\n");
-        write("return ____PEREGRINE____PEREGRINE____"+name+"(");
-        node->parameters()[1].p_name->accept(*this);
-        write(");");
-        write("\n}");
-    }
-    else if (overloaded_unary_op.count(name)>0 && return_type.size()==0 && node->parameters().size()==1 && virtual_static_inline!="static" && virtual_static_inline!="static inline"){
-        //TODO: Dont declare it twice
-        node->returnType()->accept(*this);
-        write(" ____PEREGRINE____PEREGRINE____"+name+"(");
-        m_symbolMap.set_local(name);
-        write("){\n");
-        write("auto& ");
-        is_define=true;
-        node->parameters()[0].p_name->accept(*this);
-        is_define=false;
-        write("=*this;\n");
-        if(not is_func_def){
-            is_func_def=true;
-            node->body()->accept(*this);
-            is_func_def=false;
-        }
-        else{
-            node->body()->accept(*this);
-        }
-        write("\n};\n");
-        write(virtual_static_inline+" ");
-        node->returnType()->accept(*this);
-        write(" operator"+overloaded_unary_op[name]+"(){\n");
-        write("return ____PEREGRINE____PEREGRINE____"+name+"();");
-        write("\n}");
     }
     else{
-        assert(node->parameters().size()>0);
-        if(return_type.size()==0){
-            node->returnType()->accept(*this);
-        }
-        else{
-            write("void");
-        }
-        write(" ____PEREGRINE____PEREGRINE____"+name+"(");
-        m_symbolMap.set_local(name);
+        write("int");
+    }
+    write(" ____mem____P____P____"+name+"(");
+    local_mangle_start();
+    if(is_static){
+        //It is a static function
+        codegenFuncParams(node->parameters(),0);
+    }
+    else{
         codegenFuncParams(node->parameters(),1);
-        if(node->parameters().size()>1 && return_type.size()>0){
+    }
+    if(return_type.size()>0){
+        write(",");
+    }
+    for(size_t i=0;i<return_type.size();i++){
+        return_type[i]->accept(*this);
+        write("*____P____RETURN____"+std::to_string(i)+"=NULL");
+        if(i<return_type.size()-1){
             write(",");
         }
-        for(size_t i=0;i<return_type.size();i++){
-            return_type[i]->accept(*this);
-            write("*____PEREGRINE____RETURN____"+std::to_string(i)+"=NULL");
-            if(i<return_type.size()-1){
-                write(",");
-            }
-        }
-        write("){\n");
+    }
+    write(") noexcept {\n");
+    if(!is_static){
         write("auto& ");
         is_define=true;
         node->parameters()[0].p_name->accept(*this);
         is_define=false;
         write("=*this;\n");
-        if(not is_func_def){
-            is_func_def=true;
-            node->body()->accept(*this);
-            is_func_def=false;
-        }
-        else{
-            node->body()->accept(*this);
-        }
-        write("\n}");
     }
+    if(not is_func_def){
+        is_func_def=true;
+        node->body()->accept(*this);
+        is_func_def=false;
+    }
+    else{
+        node->body()->accept(*this);
+    }
+    local_mangle_end();
+    write("\n}");
 }
-void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
+void Codegen::magic_method(ast::AstNodePtr& node,std::string name){
     switch(node->type()){
         case ast::KAstFunctionDef:{
             std::shared_ptr<ast::FunctionDefinition> function =std::dynamic_pointer_cast<ast::FunctionDefinition>(node);
@@ -266,8 +227,9 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
             auto func_name =std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
             if(func_name=="__init__"){
                 write(name+"(");
+                local_mangle_start();
                 codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                write(") noexcept {\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -282,11 +244,13 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else if (func_name=="__del__"){
                 write("~"+name+"(");
-                codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                local_mangle_start();
+                write(") noexcept {\n");
+                write("static ____P____exception_handler* ____Pexception_handlers=NULL;\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -301,6 +265,7 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else{
                 write_name(function,func_name);
@@ -315,8 +280,9 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
             assert(function->parameters().size()>0);
             if(func_name=="__init__"){
                 write(name+"(");
+                local_mangle_start();
                 codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                write(") noexcept {\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -331,11 +297,13 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else if (func_name=="__del__"){
                 write("~"+name+"(");
-                codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                local_mangle_start();
+                write(") noexcept {\n");
+                write("static ____P____exception_handler* ____Pexception_handlers=NULL;\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -350,6 +318,7 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else{
                 write_name(function,func_name,"virtual");
@@ -364,8 +333,9 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
             assert(function->parameters().size()>0);
             if(func_name=="__init__"){
                 write(name+"(");
+                local_mangle_start();
                 codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                write(") noexcept {\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -380,11 +350,13 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else if (func_name=="__del__"){
                 write("~"+name+"(");
-                codegenFuncParams(function->parameters(),1);
-                write("){\n");
+                local_mangle_start();
+                write(") noexcept {\n");
+                write("static ____P____exception_handler* ____Pexception_handlers=NULL;\n");
                 write("auto& ");
                 is_define=true;
                 function->parameters()[0].p_name->accept(*this);
@@ -399,6 +371,7 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
                     function->body()->accept(*this);
                 }
                 write("\n}");
+                local_mangle_end();
             }
             else{
                 write_name(function,func_name,"inline");
@@ -411,15 +384,19 @@ void Codegen::magic_methord(ast::AstNodePtr& node,std::string name){
             if (static_function->body()->type()==ast::KAstFunctionDef){
                 std::shared_ptr<ast::FunctionDefinition> function =std::dynamic_pointer_cast<ast::FunctionDefinition>(static_function->body());
                 auto func_name =std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
-                write_name(function,func_name,"static");
+                write_name(function,func_name,"static",true);
             }
             else if (static_function->body()->type()==ast::KAstInline){
                 write("inline ");
                 std::shared_ptr<ast::InlineStatement> inline_function =std::dynamic_pointer_cast<ast::InlineStatement>(static_function->body());
                 std::shared_ptr<ast::FunctionDefinition> function =std::dynamic_pointer_cast<ast::FunctionDefinition>(inline_function->body());
                 auto func_name =std::dynamic_pointer_cast<ast::IdentifierExpression>(function->name())->value();
-                write_name(function,func_name,"static inline");
+                write_name(function,func_name,"static inline",true);
             }
+            break;
+        }
+        case ast::KAstDecorator:{
+            node->accept(*this);
             break;
         }
         default:{}
@@ -429,9 +406,7 @@ std::vector<ast::AstNodePtr> Codegen::TurpleTypes(ast::AstNodePtr node){
     std::vector<ast::AstNodePtr> turple_types;
     if(node->type()==ast::KAstTypeTuple){
         std::shared_ptr<ast::TypeTuple> turple =std::dynamic_pointer_cast<ast::TypeTuple>(node);
-        if(turple->multiple_return()){
-            turple_types=turple->items();
-        }
+        turple_types=turple->items();
     }
     
     return turple_types;
@@ -440,9 +415,7 @@ std::vector<ast::AstNodePtr> Codegen::TurpleExpression(ast::AstNodePtr node){
     std::vector<ast::AstNodePtr> turple_exp;
     if(node->type()==ast::KAstExpressionTuple){
         std::shared_ptr<ast::ExpressionTuple> turple =std::dynamic_pointer_cast<ast::ExpressionTuple>(node);
-        if(turple->multiple_return()){
-            turple_exp=turple->items();
-        }
+        turple_exp=turple->items();
     }
     
     return turple_exp;

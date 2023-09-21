@@ -1,6 +1,7 @@
 #include "analyzer/typeChecker.hpp"
 #include "docgen/html/docgen.hpp"
 #include "codegen/cpp/codegen.hpp"
+#include "analyzer/ast_validate.hpp"
 #include "cli/cli.hpp"
 #include "codegen/js/codegen.hpp"
 #include "lexer/lexer.hpp"
@@ -12,21 +13,8 @@
 #include <sstream>
 #include <string.h>
 #include <vector>
-
-
-bool check_file_existence(std::string fname){
-    FILE *file; 
-
-    file = fopen( fname.c_str() , "r");
-
-   if (file != NULL) {
-      fclose(file);
-      return true;
-   } else {
-      return false;
-   }
-}
-
+#include <sys/stat.h>
+#include <filesystem>
 
 void compile(cli::state s){
     if (s.dev_debug){
@@ -34,28 +22,39 @@ void compile(cli::state s){
         std::stringstream buf;
         buf << file.rdbuf();
 
-        std::vector<Token> tokens = lexer(buf.str(), "test");
+        auto lex=LEXER(buf.str(), "test");
+        std::vector<Token> tokens = lex.result(); 
 
-        for (auto& token : tokens) {
-            std::cout << "Keyword= " << token.keyword
-                      << " Type= " << token.tkType <<" Line= "<<token.line<<" Loc="<<token.location<<"\n";
-        }
-        Parser parser(tokens, "test");
+        // for (auto& token : tokens) {
+        //     std::cout << "Keyword= " << token.keyword
+        //               << " Type= " << token.tkType <<" Line= "<<token.line<<" Loc="<<token.location<<"\n";
+        // }
+        Parser::Parser parser(tokens, "test");
         ast::AstNodePtr program = parser.parse();
-        std::cout << program->stringify() << "\n";
-        // TypeChecker typeChecker(program);
+        // std::cout << program->stringify() << "\n";
+        TypeCheck::TypeChecker typeChecker(program);
+        // astValidator::Validator val(program,"test");
+        std::cout <<"Typed Ast:- \n"<<program->stringify() << "\n";
     }
     else{
-
-        if (check_file_existence(s.input_filename)){
-            std::ifstream file(s.input_filename);
+        std::ifstream file(s.input_filename);
+        if (file){
             std::stringstream buf;
             buf << file.rdbuf();
             auto filename=s.input_filename;
-            std::string path = realpath(filename.c_str(), NULL);
-            std::vector<Token> tokens = lexer(buf.str(), path);
-            Parser parser(tokens,path);
+            std::string path = std::filesystem::canonical(filename).string();
+            auto lex=LEXER(buf.str(), path);
+            std::vector<Token> tokens = lex.result(); 
+            struct stat st;
+            if( stat(path.c_str(),&st) == 0 ){
+                if( st.st_mode & S_IFDIR ){
+                    std::cout<<"Error: "<<path<<" is a directory"<<std::endl;
+                    exit(1);
+                }
+            }
+            Parser::Parser parser(tokens,path);
             ast::AstNodePtr program = parser.parse();
+            astValidator::Validator val(program,path,s.emit_js,s.has_main);
             auto output=s.output_filename;
             
             if (s.emit_js){
@@ -68,18 +67,22 @@ void compile(cli::state s){
                 cpp::Codegen codegen(output, program,path);
             }else if(s.emit_obj){
                 cpp::Codegen codegen("temp.cc", program,path);
-                auto cmd=s.cpp_compiler+" -c -std=c++20 temp.cc -fpermissive -w "+s.cpp_arg+" -o "+output;
+                auto cmd=s.cpp_compiler+"  -c -std=c++20 temp.cc -fpermissive -w "+s.cpp_arg+" -o "+output;
                 system(cmd.c_str());
                 system("rm temp.cc");
             }else{
                 cpp::Codegen codegen("temp.cc", program,path);
+                if(s.is_release){
+                    s.cpp_arg+=" -flto -s ";
+                }
                 auto cmd=s.cpp_compiler+" -std=c++2a temp.cc -fpermissive -w "+s.cpp_arg+" -o "+output;
                 system(cmd.c_str());
                 system("rm temp.cc");
             }
         }
         else{
-            std::cout << "error: file with name of \"" << s.input_filename << "\" does not exist\n";
+            std::cout << "error: file with name of \"" << s.input_filename << "\" does not exist"<<std::endl;
+            exit(1);
         }
         
     }

@@ -1,89 +1,11 @@
 #include "parser.hpp"
 #include <iostream>
 #include <algorithm>
-bool Parser::is_imported_var(){
-    auto index=m_tokIndex;
-    auto tokens = m_tokens;
-    size_t brac_count=0;
-    size_t list_brac_count=0;
-    Token curr_tok;
-    Token prev_tok;
-    while (true){
-        curr_tok=tokens[index];
-        if (curr_tok.tkType==tk_identifier){}
-        else if (curr_tok.tkType==tk_dot || curr_tok.tkType==tk_arrow){}
-        else if (curr_tok.tkType==tk_l_paren){brac_count++;}
-        else if (curr_tok.tkType==tk_r_paren){brac_count--;}
-        else if (curr_tok.tkType==tk_list_open){list_brac_count++;}
-        else if (curr_tok.tkType==tk_list_close){list_brac_count--;}
-        else if(curr_tok.tkType==tk_assign && brac_count==0 && list_brac_count==0){return true;}
-        else if (brac_count==0 && list_brac_count==0){return false;}
-        prev_tok=curr_tok;
-        index++;
-    }
-}
 
-bool Parser::is_multiple_assign(){
-    auto index=m_tokIndex;
-    auto tokens = m_tokens;
-    size_t brac_count=0;
-    size_t list_brac_count=0;
-    Token curr_tok;
-    Token prev_tok;
-    bool has_comma=false;
-    while (true){
-        curr_tok=tokens[index];
-        if (curr_tok.tkType==tk_identifier){}
-        else if (curr_tok.tkType==tk_dot || curr_tok.tkType==tk_arrow){}
-        else if (curr_tok.tkType==tk_l_paren){brac_count++;}
-        else if (curr_tok.tkType==tk_r_paren){brac_count--;}
-        else if (curr_tok.tkType==tk_list_open){list_brac_count++;}
-        else if (curr_tok.tkType==tk_list_close){list_brac_count--;}
-        else if(curr_tok.tkType==tk_comma && brac_count==0 && list_brac_count==0){has_comma=true;}
-        else if(curr_tok.tkType==tk_assign && brac_count==0 && list_brac_count==0 && has_comma){return true;}
-        else if (brac_count==0 && list_brac_count==0){return false;}
-        prev_tok=curr_tok;
-        index++;
-    }
-}
-
-bool Parser::is_aug_assign(){
-    auto index=m_tokIndex;
-    auto tokens = m_tokens;
-    size_t brac_count=0;
-    size_t list_brac_count=0;
-    std::vector<TokenType> operators({
-                                            tk_slash_equal,
-                                            tk_floor_equal,
-                                            tk_plus_equal,
-                                            tk_minus_equal,
-                                            tk_times_equal,
-                                            tk_mod_equal,
-                                            tk_shift_left_equal,
-                                            tk_shift_right_equal,
-                                            tk_bit_and_equal,
-                                            tk_bit_or_equal,
-                                            tk_bit_xor_equal,
-                                            tk_exponent_equal
-                                        });
-    Token curr_tok;
-    Token prev_tok;
-    while (true){
-        curr_tok=tokens[index];
-        if (curr_tok.tkType==tk_identifier){}
-        else if (curr_tok.tkType==tk_dot || curr_tok.tkType==tk_arrow){}
-        else if (curr_tok.tkType==tk_l_paren){brac_count++;}
-        else if (curr_tok.tkType==tk_r_paren){brac_count--;}
-        else if (curr_tok.tkType==tk_list_open){list_brac_count++;}
-        else if (curr_tok.tkType==tk_list_close){list_brac_count--;}
-        else if(std::count(operators.begin(), operators.end(), curr_tok.tkType) != 0 && brac_count==0 && list_brac_count==0){return true;}
-        else if (brac_count==0 && list_brac_count==0){return false;}
-        prev_tok=curr_tok;
-        index++;
-    }
-}
+namespace Parser{
 
 void Parser::advance() {
+    //go to next token
     m_tokIndex++;
 
     if (m_tokIndex < m_tokens.size()) {
@@ -92,12 +14,14 @@ void Parser::advance() {
 }
 
 void Parser::advanceOnNewLine() {
+    //go to next line
     if (next().tkType == tk_new_line) {
         advance();
     }
 }
 
 Token Parser::next() {
+    //check the next token
     Token token;
 
     if (m_tokIndex + 1 < m_tokens.size()) {
@@ -108,15 +32,19 @@ Token Parser::next() {
 }
 
 PrecedenceType Parser::nextPrecedence() {
-    if (precedenceMap.count(next().tkType) > 0) {
+    //get the precedence of next operator
+    if(m_currentToken.tkType == tk_new_line||m_currentToken.tkType == tk_dedent) {
+        return pr_lowest;
+    }
+    else if (precedenceMap.count(next().tkType) > 0) {
         return precedenceMap[next().tkType];
     }
-
     return pr_lowest;
 }
 
 void Parser::error(Token tok, std::string msg,std::string submsg,std::string hint,std::string ecode) {
-    PEError err = {{tok.line, tok.start,tok.location, m_filename, tok.statement},
+    //display error
+    PEError err = {{tok.line, tok.location,tok.location, m_filename, tok.statement},
                    std::string(msg),
                    submsg,
                    hint,
@@ -127,6 +55,7 @@ void Parser::error(Token tok, std::string msg,std::string submsg,std::string hin
 }
 
 void Parser::expect(TokenType expectedType, std::string msg,std::string submsg,std::string hint,std::string ecode) {
+    //check if the next toke is what we expect or else show error
     if (next().tkType != expectedType) {
         if(msg==""){
             msg="expected token of type " + std::to_string(expectedType) +", got " + std::to_string(next().tkType) + " instead";
@@ -142,12 +71,16 @@ void Parser::expect(TokenType expectedType, std::string msg,std::string submsg,s
 }
 
 std::map<TokenType, PrecedenceType> createMap() {
+    //precedence map
     std::map<TokenType, PrecedenceType> precedenceMap;
+    precedenceMap[tk_for] = pr_conditional;
+    precedenceMap[tk_double_dot] = pr_range;
+    precedenceMap[tk_dollar] = pr_prefix;
     precedenceMap[tk_bit_not] = pr_prefix;
     precedenceMap[tk_if] = pr_conditional;
     precedenceMap[tk_else] = pr_conditional;
-    precedenceMap[tk_and] = pr_and_or;
-    precedenceMap[tk_or] = pr_and_or;
+    precedenceMap[tk_and] = pr_and;
+    precedenceMap[tk_or] = pr_or;
     precedenceMap[tk_not] = pr_not;
     precedenceMap[tk_not_equal] = pr_compare;
     precedenceMap[tk_is_not] = pr_compare;
@@ -162,8 +95,9 @@ std::map<TokenType, PrecedenceType> createMap() {
     precedenceMap[tk_bit_or] = pr_bit_or;
     precedenceMap[tk_xor] = pr_bit_xor;
     precedenceMap[tk_ampersand] = pr_bit_and;
-    precedenceMap[tk_shift_left] = pr_bit_shift;
-    precedenceMap[tk_shift_right] = pr_bit_shift;
+    precedenceMap[tk_shift_left] = pr_bit_shift_pipeline;
+    precedenceMap[tk_shift_right] = pr_bit_shift_pipeline;
+    precedenceMap[tk_pipeline] = pr_bit_shift_pipeline;
     precedenceMap[tk_plus] = pr_sum_minus;
     precedenceMap[tk_minus] = pr_sum_minus;
     precedenceMap[tk_multiply] = pr_mul_div;
@@ -179,4 +113,61 @@ std::map<TokenType, PrecedenceType> createMap() {
     precedenceMap[tk_decrement] = pr_postfix;
 
     return precedenceMap;
+}
+parameter Parser::parseParameter(){
+    //parse function parameter
+    AstNodePtr paramType = std::make_shared<NoLiteral>();
+    AstNodePtr paramDefault = std::make_shared<NoLiteral>();
+    AstNodePtr paramName = std::make_shared<NoLiteral>();
+    bool is_const = false;
+    if(m_currentToken.tkType==tk_const){
+        is_const=true;
+        advance();
+    }
+    auto tok=m_currentToken;
+    if(m_currentToken.tkType==tk_multiply){
+        advance();
+        ParamType x;
+        if(m_currentToken.tkType==tk_multiply){
+            paramType=std::make_shared<VarKwargTypeExpr>(tok);
+            expect(tk_identifier,"Expected identifier but got "+next().keyword,"","","");
+            x=VarKwarg;
+            paramName=parseName();
+        }
+        else if(m_currentToken.tkType==tk_identifier){
+            paramType=std::make_shared<VarArgTypeExpr>(tok);
+            paramName=parseName();
+            x=VarArg;
+        }
+        else{
+            error(m_currentToken,"Expected identifier but got "+m_currentToken.keyword,"","","");
+        }
+        advance();
+        return parameter{paramType, paramName,paramDefault,is_const,x};
+    }
+    else if(m_currentToken.tkType==tk_ellipses){
+        ParamType x=Ellipses;
+        paramType=std::make_shared<EllipsesTypeExpr>(tok);
+        if(next().tkType==tk_identifier){
+            advance();
+            paramName=parseName();
+        }
+        advance();
+        return parameter{paramType, paramName,paramDefault,is_const,x};
+    }
+    paramName = parseName();
+    if(next().tkType==tk_comma || next().tkType==tk_r_paren|| next().tkType==tk_assign){}
+    else{
+        expect(tk_colon,"Expected a : but got "+next().keyword+" instead");
+        advance();
+        paramType = parseType();
+    }
+    advance();
+    if(m_currentToken.tkType==tk_assign){
+        advance();
+        paramDefault=parseExpression();
+        advance();
+    }
+    return parameter{paramType, paramName,paramDefault,is_const};
+}
 }

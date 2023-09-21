@@ -1,11 +1,11 @@
 test
 Peregrine/test
-.vscode
 /push.bat
 /push.sh
 .idea
 **/output
 **.out
+__pycache__
 temp.cc
 **.exe
 *.so

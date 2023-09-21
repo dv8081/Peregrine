@@ -7,7 +7,6 @@ namespace ast {
 
 // TODO: have a default behaviour in case the visitor does not provide a visit
 // method for the node
-
 void Program::accept(AstVisitor& visitor) const {
     if (!visitor.visit(*this))
         for (auto& stmt : m_statements)
@@ -36,8 +35,6 @@ void TypeExpression::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 void UnionLiteral::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 void EnumLiteral::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 void ListTypeExpr::accept(AstVisitor& visitor) const { visitor.visit(*this); }
-
-void DictTypeExpr::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 
 void FunctionTypeExpr::accept(AstVisitor& visitor) const {
     visitor.visit(*this);
@@ -167,8 +164,25 @@ void ExternStatement::accept(AstVisitor& visitor) const { visitor.visit(*this); 
 
 void SumType::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 
+
 void MultipleAssign::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 
 void AugAssign::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 
+void MethodDefinition::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+
+void ExternFuncDef::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void ExternUnionLiteral::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void ExternStructLiteral::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+
+void VarArgTypeExpr::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void VarKwargTypeExpr::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void EllipsesTypeExpr::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void CompileTimeExpression::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void TernaryFor::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void PrivateDef::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void InlineAsm::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void LambdaDefinition::accept(AstVisitor &visitor) const {visitor.visit(*this);}
+void GenericCall::accept(AstVisitor& visitor) const { visitor.visit(*this); }
+void FormatedStr::accept(AstVisitor& visitor) const { visitor.visit(*this); }
 } // namespace ast

@@ -5,29 +5,35 @@
 #include "ast/types.hpp"
 #include "ast/visitor.hpp"
 #include "utils/symbolTable.hpp"
+#include "errors/error.hpp"
 
 #include <memory>
 #include <vector>
-
+namespace TypeCheck{
 using namespace types;
-
+using namespace Utils;
 using EnvPtr = std::shared_ptr<SymbolTable<TypePtr>>;
 
 class TypeChecker : public ast::AstVisitor {
-  public:
+    public:
     TypeChecker(ast::AstNodePtr ast);
 
-  private:
-    void error(Token tok, std::string_view msg);
-    EnvPtr createEnv(EnvPtr parent = nullptr);
+    private:
+    std::vector<PEError> m_errors;
+    void add_error(Token tok, std::string_view msg);
+    bool defined(ast::AstNodePtr name);
+    EnvPtr createEnv(EnvPtr parent);
     std::string identifierName(ast::AstNodePtr identifier);
-    void checkBody(ast::AstNodePtr body);
+    void checkBody(ast::AstNodePtr body,
+                   std::vector<std::pair<TypePtr,ast::AstNodePtr>> add_var={});
 
-    void check(ast::AstNodePtr expr, const Type& expectedType);
+    void check(ast::AstNodePtr expr, const TypePtr expTypePtr);
+    void check(const TypePtr exprType, const TypePtr expTypePtr, Token tok={});
 
     bool visit(const ast::ClassDefinition& node);
     bool visit(const ast::ImportStatement& node);
     bool visit(const ast::FunctionDefinition& node);
+    bool visit(const ast::MethodDefinition& node);
     bool visit(const ast::VariableStatement& node);
     bool visit(const ast::ConstDeclaration& node);
     bool visit(const ast::TypeDefinition& node);
@@ -41,7 +47,6 @@ class TypeChecker : public ast::AstVisitor {
     bool visit(const ast::ForStatement& node);
     bool visit(const ast::MatchStatement& node);
     bool visit(const ast::ScopeStatement& node);
-    // bool visit(const ast::CppStatement& node);
     bool visit(const ast::ReturnStatement& node);
     bool visit(const ast::DecoratorStatement& node);
     bool visit(const ast::ListLiteral& node);
@@ -56,7 +61,6 @@ class TypeChecker : public ast::AstVisitor {
     bool visit(const ast::IdentifierExpression& node);
     bool visit(const ast::TypeExpression& node);
     bool visit(const ast::ListTypeExpr& node);
-    bool visit(const ast::DictTypeExpr& node);
     bool visit(const ast::FunctionTypeExpr& node);
     bool visit(const ast::NoLiteral& node);
     bool visit(const ast::IntegerLiteral& node);
@@ -73,6 +77,12 @@ class TypeChecker : public ast::AstVisitor {
     bool visit(const ast::DefaultArg& node);
     bool visit(const ast::TernaryIf& node);
     bool visit(const ast::TryExcept& node);
+    bool visit(const ast::MultipleAssign& node);
+    bool visit(const ast::ExpressionTuple& node);
+    bool visit(const ast::TypeTuple& node);
+    bool visit(const ast::LambdaDefinition& node);
+    bool visit(const ast::ExternStatement& node);
+    bool visit(const ast::ExternFuncDef& node);
 
     std::string m_filename;
     TypePtr m_result;
@@ -80,6 +90,8 @@ class TypeChecker : public ast::AstVisitor {
 
     // the function whose body is being currently checked
     std::shared_ptr<FunctionType> m_currentFunction;
+    TypePtr m_returnType=NULL;//current return type
+    std::map<std::string,std::vector<std::string>> extern_libs;//the c libs that are imported
 };
-
+}
 #endif

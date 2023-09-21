@@ -8,6 +8,9 @@ namespace cli{
         println("\tcompile          - compiles a given file");
         println("\thelp             - prints out help");
         println("\nPeregrine Options:");
+        println("\t-release         - create release builds");
+        println("\t-debug           - create debug builds");
+        println("\t-static          - create statically linked builds");
         println("\t-cc              - select the c++ compiler with which you want to compile the resultant code");
         println("\t-cc_flag         - add flags with which you want to compile the generated c++ code");
         println("\t-emit_cpp        - generates C++ code and exits (skips C++ compilation phase)");
@@ -39,7 +42,7 @@ namespace cli{
             }else if (curr_arg=="-cc_flag"){
                 advance();
                 checkargs("C++ compiler flag");
-                m_state.cpp_arg = curr_arg;
+                m_state.cpp_arg +=" "+curr_arg;
             }else if (curr_arg=="-emit_cpp"){
                 m_state.emit_cpp = true;
             }else if (curr_arg=="-obj"){
@@ -50,6 +53,14 @@ namespace cli{
                 m_state.emit_html = true;
             }else if (curr_arg=="-doc_html"){
                 m_state.doc_html = true;
+            }else if(curr_arg=="-release"){
+                m_state.cpp_arg+=" -O2 ";
+                m_state.is_release=true;
+            }else if(curr_arg=="-static"){
+                m_state.cpp_arg+=" -static ";
+            }else if(curr_arg=="-debug"){
+                m_state.debug=true;
+                m_state.cpp_arg+=" -ggdb -glldb ";
             }else if (curr_arg=="-o"){
                 advance();
                 checkargs("output file");
@@ -57,6 +68,14 @@ namespace cli{
             }else if(curr_arg=="compile"){
                 advance();
                 checkargs("input file");
+                if (curr_arg.substr(curr_arg.size()-3, 3)!=".pe"){
+                    println("Error: input file must be a .pe file");
+                    exit(1);
+                }
+                else if(m_state.input_filename!=""){
+                    println("Error: Only one input file can be specified");
+                    exit(1);
+                }
                 m_state.input_filename = curr_arg;
             }else if(curr_arg=="-dev_debug"){
                 m_state.dev_debug = true;
@@ -66,6 +85,10 @@ namespace cli{
             }else{
                 if (curr_arg.size() > 3){
                     if (curr_arg.substr(curr_arg.size()-3, 3)==".pe"){
+                        if(m_state.input_filename!=""){
+                            println("Error: Only one input file can be specified");
+                            exit(1);
+                        }
                         m_state.input_filename = curr_arg;
                     }
                     else{
@@ -90,6 +113,10 @@ namespace cli{
     }
     void state::validate_state(){
         auto& m_state=*this;
+        if(m_state.debug&&m_state.is_release){
+            println("You can't create a release and debug build at the same time");
+            exit(1);
+        }
         if (m_state.input_filename=="" && !m_state.dev_debug){
             println("No input file specified.\nUse 'peregrine help' for more information");
             exit(1);
@@ -116,6 +143,7 @@ namespace cli{
                 m_state.output_filename=m_state.input_filename.substr(0, m_state.input_filename.size()-3)+".exe";
                 #else
                 m_state.output_filename=m_state.input_filename.substr(0, m_state.input_filename.size()-3);
+                m_state.has_main=true;
                 #endif
             }
         }
@@ -151,7 +179,7 @@ namespace cli{
             check_state++;
         }
         if(m_state.cpp_compiler==""){
-            m_state.cpp_compiler="g++";//it will use clang that we are shiping with in the future
+            m_state.cpp_compiler="clang++";//it will use clang that we are shiping with in the future
         }
     }
 }
